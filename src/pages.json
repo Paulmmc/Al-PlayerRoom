@@ -1,0 +1,66 @@
+{
+  "pages": [
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationBarTitleText": "游戏库"
+      }
+    },
+    {
+      "path": "pages/search/index",
+      "style": {
+        "navigationBarTitleText": "搜索"
+      }
+    },
+    {
+      "path": "pages/game/detail",
+      "style": {
+        "navigationBarTitleText": "游戏详情"
+      }
+    },
+    {
+      "path": "pages/game/edit",
+      "style": {
+        "navigationBarTitleText": "编辑游戏"
+      }
+    },
+    {
+      "path": "pages/player/profile",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "PlayerRoom",
+    "navigationBarBackgroundColor": "#0f1219",
+    "backgroundColor": "#0f1219"
+  },
+  "tabBar": {
+    "color": "#6b7388",
+    "selectedColor": "#8b9cff",
+    "backgroundColor": "#151a26",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "游戏库",
+        "iconPath": "static/tabbar/home.png",
+        "selectedIconPath": "static/tabbar/home-active.png"
+      },
+      {
+        "pagePath": "pages/search/index",
+        "text": "搜索",
+        "iconPath": "static/tabbar/search.png",
+        "selectedIconPath": "static/tabbar/search-active.png"
+      },
+      {
+        "pagePath": "pages/player/profile",
+        "text": "我的",
+        "iconPath": "static/tabbar/profile.png",
+        "selectedIconPath": "static/tabbar/profile-active.png"
+      }
+    ]
+  }
+}
