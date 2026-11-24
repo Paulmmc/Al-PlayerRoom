@@ -28,6 +28,9 @@
         <text v-for="tag in game.tags.slice(0, 2)" :key="tag" class="eshop-tag">
           {{ tag }}
         </text>
+        <text class="shelf-action shelf-action-eshop" @click.stop="emit('shelf', game.id)">
+          {{ game.onShelf ? '展示中' : '书架展示' }}
+        </text>
       </view>
     </view>
   </view>
@@ -58,6 +61,9 @@
         <text class="status-badge" :style="badgeStyle">{{ statusLabel }}</text>
       </view>
       <text class="ps-summary">{{ game.summary }}</text>
+      <text class="shelf-action shelf-action-light" @click.stop="emit('shelf', game.id)">
+        {{ game.onShelf ? '展示中' : '书架展示' }}
+      </text>
     </view>
   </view>
 
@@ -88,6 +94,9 @@
       </view>
       <text class="steam-tags">{{ game.tags.join(' · ') }}</text>
       <text class="steam-summary">{{ game.summary }}</text>
+      <text class="shelf-action" @click.stop="emit('shelf', game.id)">
+        {{ game.onShelf ? '展示中' : '书架展示' }}
+      </text>
       <text
         v-if="removable"
         class="steam-delete"
@@ -118,6 +127,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   open: [id: string]
   remove: [id: string]
+  shelf: [id: string]
 }>()
 
 const cover = computed(() => gameCover(props.game))
@@ -350,11 +360,24 @@ const animStyle = computed(() => ({
   -webkit-box-orient: vertical;
 }
 
-.steam-delete {
+.steam-delete,
+.shelf-action {
   display: inline-block;
   margin-top: 12rpx;
   color: #e60012;
   font-size: 24rpx;
   font-weight: 700;
+}
+
+.shelf-action {
+  color: #66c0f4;
+}
+
+.shelf-action-eshop {
+  color: #e60012;
+}
+
+.shelf-action-light {
+  color: #8b9cff;
 }
 </style>

@@ -99,6 +99,9 @@ function normalizeGame(game: Game & { screenshots?: unknown }): Game {
     status: resolveStatus(game),
     note: normalizeNote(game.note),
     journal: normalizeJournal(game.journal),
+    onShelf:
+      typeof game.onShelf === 'boolean' ? game.onShelf : resolveStatus(game) === 'playing',
+    shelfAt: typeof game.shelfAt === 'number' && Number.isFinite(game.shelfAt) ? game.shelfAt : 0,
   }
 }
 
@@ -135,6 +138,11 @@ function mergeWithSeed(stored: Game[]): Game[] {
         status: isPlayStatus(game.status) ? game.status : seed.status,
         note: game.note === undefined ? seed.note : normalizeNote(game.note),
         journal: game.journal === undefined ? seed.journal : normalizeJournal(game.journal),
+        onShelf: typeof game.onShelf === 'boolean' ? game.onShelf : seed.onShelf,
+        shelfAt:
+          typeof game.shelfAt === 'number' && Number.isFinite(game.shelfAt)
+            ? game.shelfAt
+            : seed.shelfAt,
       })
     })
 
@@ -259,6 +267,41 @@ export function listMyGamesByPlatform(platform: Platform): Game[] {
   return listMyGamesFiltered(platform)
 }
 
+export function listShelfGames(platform: Platform): Game[] {
+  return listMyGames()
+    .filter((game) => game.platform === platform && game.onShelf)
+    .sort((a, b) => b.shelfAt - a.shelfAt)
+}
+
+export function setOnShelf(id: string, on: boolean): Game | undefined {
+  let index = findMyGameIndex(id)
+  if (index < 0) {
+    reloadFromStorage()
+    index = findMyGameIndex(id)
+    if (index < 0) return undefined
+  }
+  const current = games[index]
+  if (on) {
+    if (current.onShelf) return current
+    const occupied = games.filter(
+      (game) =>
+        game.playerId === CURRENT_PLAYER_ID &&
+        game.platform === current.platform &&
+        game.onShelf,
+    ).length
+    if (occupied >= 8) return undefined
+    return writeShelf(index, true, Date.now())
+  }
+  return writeShelf(index, false, 0)
+}
+
+function writeShelf(index: number, onShelf: boolean, shelfAt: number): Game {
+  const next: Game = { ...games[index], onShelf, shelfAt }
+  games = [...games.slice(0, index), next, ...games.slice(index + 1)]
+  persist()
+  return next
+}
+
 export function listGamesByPlatform(platform: Platform): Game[] {
   return listMyGamesByPlatform(platform)
 }
@@ -340,6 +383,22 @@ function commitUpdate(index: number, patch: GamePatch): Game {
     patch.title !== undefined
       ? String(patch.title).trim() || current.title
       : current.title
+  const nextPlatform = patch.platform || current.platform
+  let onShelf = current.onShelf
+  let shelfAt = current.shelfAt
+  if (nextPlatform !== current.platform && current.onShelf) {
+    const occupied = games.filter(
+      (game) =>
+        game.id !== current.id &&
+        game.playerId === CURRENT_PLAYER_ID &&
+        game.platform === nextPlatform &&
+        game.onShelf,
+    ).length
+    if (occupied >= 8) {
+      onShelf = false
+      shelfAt = 0
+    }
+  }
   const next: Game = {
     ...current,
     ...patch,
@@ -356,6 +415,8 @@ function commitUpdate(index: number, patch: GamePatch): Game {
         ? patch.status
         : current.status,
     note: patch.note !== undefined ? normalizeNote(patch.note) : current.note,
+    onShelf,
+    shelfAt,
   }
   games = [...games.slice(0, index), next, ...games.slice(index + 1)]
   persist()
@@ -376,6 +437,8 @@ export function addGame(input: AddGameInput): Game {
     status: isPlayStatus(input.status) ? input.status : 'backlog',
     note: normalizeNote(input.note),
     journal: [],
+    onShelf: false,
+    shelfAt: 0,
   })
   games = [...games, game]
   persist()

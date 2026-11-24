@@ -8,7 +8,6 @@
       @pointerdown="onGestureStart"
       @pointercancel="onGestureCancel"
     >
-      <view class="shelf-plank" />
       <view class="track" :class="{ dragging }" :style="trackStyle">
         <CasePack
           v-for="(game, index) in games"
@@ -41,6 +40,13 @@
         </text>
       </view>
       <text
+        class="focus-unshelf"
+        :style="{ color: muted }"
+        @click.stop="onUnshelf(focusGame.id)"
+      >
+        取消展示
+      </text>
+      <text
         class="focus-delete"
         :style="{ color: accent || '#e60012' }"
         @click.stop="onRemove(focusGame.id)"
@@ -71,6 +77,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [id: string]
   remove: [id: string]
+  unshelf: [id: string]
 }>()
 
 const focusIndex = ref(0)
@@ -256,6 +263,11 @@ function onRemove(id: string) {
   if (didSwipe.value) return
   emit('remove', id)
 }
+
+function onUnshelf(id: string) {
+  if (didSwipe.value) return
+  emit('unshelf', id)
+}
 </script>
 
 <style scoped>
@@ -286,7 +298,7 @@ function onRemove(id: string) {
 .track {
   position: absolute;
   left: 0;
-  bottom: 18px;
+  bottom: 8px;
   display: flex;
   align-items: flex-end;
   gap: 18px;
@@ -302,21 +314,6 @@ function onRemove(id: string) {
 
 .shelf:active {
   cursor: grabbing;
-}
-
-.shelf-plank {
-  position: absolute;
-  left: 4%;
-  right: 4%;
-  bottom: 6px;
-  height: 10px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, #cfc8bc 0%, #b7afa2 45%, #9e968a 100%);
-  box-shadow:
-    0 6px 14px rgba(0, 0, 0, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
-  pointer-events: none;
-  z-index: 0;
 }
 
 .shelf-hint {
@@ -342,7 +339,8 @@ function onRemove(id: string) {
   min-width: 0;
 }
 
-.focus-delete {
+.focus-delete,
+.focus-unshelf {
   flex-shrink: 0;
   font-size: 24rpx;
   font-weight: 700;

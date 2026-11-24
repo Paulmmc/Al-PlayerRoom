@@ -30,6 +30,8 @@ export const seedGames: Game[] = [
     status: 'playing',
     note: '二周目，神庙还没清完',
     journal: [],
+    onShelf: true,
+    shelfAt: 2,
     ...assets('g-zelda-totk'),
   },
   {
@@ -43,6 +45,8 @@ export const seedGames: Game[] = [
     status: 'done',
     note: '',
     journal: [],
+    onShelf: false,
+    shelfAt: 0,
     ...assets('g-mario-odyssey'),
   },
   {
@@ -56,6 +60,8 @@ export const seedGames: Game[] = [
     status: 'playing',
     note: '',
     journal: [],
+    onShelf: true,
+    shelfAt: 2,
     ...assets('g-elden-ring'),
   },
   {
@@ -69,6 +75,8 @@ export const seedGames: Game[] = [
     status: 'backlog',
     note: '',
     journal: [],
+    onShelf: false,
+    shelfAt: 0,
     ...assets('g-gow-ragnarok'),
   },
   {
@@ -82,6 +90,8 @@ export const seedGames: Game[] = [
     status: 'shelved',
     note: '',
     journal: [],
+    onShelf: false,
+    shelfAt: 0,
     ...assets('g-black-myth', 'capsule.jpg'),
   },
   {
@@ -95,6 +105,8 @@ export const seedGames: Game[] = [
     status: 'done',
     note: '',
     journal: [],
+    onShelf: false,
+    shelfAt: 0,
     ...assets('g-hollow-knight', 'capsule.jpg'),
   },
 ]

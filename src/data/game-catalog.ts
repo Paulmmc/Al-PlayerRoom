@@ -20,6 +20,8 @@ function toGame(entry: Entry): Game {
     status: 'backlog',
     note: '',
     journal: [],
+    onShelf: false,
+    shelfAt: 0,
   }
 }
 

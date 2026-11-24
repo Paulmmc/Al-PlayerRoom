@@ -51,6 +51,7 @@
         removable
         @open="goGame"
         @remove="confirmRemove"
+        @shelf="toggleShelf"
       />
     </view>
     <view v-else class="empty">
@@ -63,7 +64,7 @@
 import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import StoreGameCard from '../../components/StoreGameCard.vue'
-import { reloadFromStorage, removeGame, searchMyGames } from '../../services/catalog'
+import { getGame, reloadFromStorage, removeGame, searchMyGames, setOnShelf } from '../../services/catalog'
 import type { Game, PlayStatus } from '../../types/catalog'
 import { PLAY_STATUSES, STATUS_COLORS, STATUS_LABELS } from '../../types/catalog'
 
@@ -108,6 +109,17 @@ watch(keyword, () => {
 onShow(() => {
   refresh()
 })
+
+function toggleShelf(id: string) {
+  const game = getGame(id)
+  if (!game) return
+  const updated = setOnShelf(id, !game.onShelf)
+  if (!updated) {
+    uni.showToast({ title: '这个平台的书架最多 8 本', icon: 'none' })
+    return
+  }
+  refresh()
+}
 
 function goGame(id: string) {
   uni.navigateTo({ url: `/pages/game/detail?id=${id}` })

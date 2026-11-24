@@ -62,6 +62,10 @@ export interface Game {
   /** Player note, at most 40 characters */
   note: string
   journal: JournalEntry[]
+  /** Whether this game sits on its platform shelf */
+  onShelf: boolean
+  /** Larger means closer to the front of the shelf. 0 when off the shelf */
+  shelfAt: number
 }
 
 export type GamePatch = Partial<
