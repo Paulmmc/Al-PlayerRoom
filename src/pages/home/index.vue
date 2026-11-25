@@ -32,7 +32,7 @@
     <view
       ref="statusSegEl"
       class="seg seg-wide status-seg"
-      :style="{ background: segTheme.track }"
+      :style="{ background: theme.tabBg }"
       @pointerdown="onSegPointerDown('status', $event)"
       @pointermove="onSegMove"
       @pointerup="onSegUp"
@@ -52,7 +52,10 @@
         class="seg-item"
         @click.stop="onItemClick('status', index + 1)"
       >
-        <text class="seg-label" :style="statusTextStyle(item)">{{ statusLabels[item] }}</text>
+        <view class="status-pair">
+          <MarkIcon :name="item" :size="22" :color="statusMarkColor(item)" />
+          <text class="seg-label status-pair-label" :style="statusTextStyle(item)">{{ statusLabels[item] }}</text>
+        </view>
       </view>
     </view>
 
@@ -68,7 +71,6 @@
           :accent="theme.accent"
           @open="goGame"
           @remove="confirmRemove"
-          @unshelf="unshelf"
         />
       </view>
       <text v-else class="shelf-empty" :style="{ color: theme.muted }">
@@ -104,31 +106,37 @@
       <view class="library">
         <view v-if="listedGames.length && viewMode === 'icons'" class="icon-grid">
           <view v-for="game in listedGames" :key="game.id" class="icon-item">
-            <image
-              v-if="coverOf(game)"
-              class="icon-cover"
-              :src="coverOf(game)"
-              mode="aspectFill"
-              @click="goGame(game.id)"
-            />
-            <view
-              v-else
-              class="icon-cover icon-fallback"
-              :style="{ background: game.coverColor }"
-              @click="goGame(game.id)"
-            >
-              <text class="icon-fallback-text">{{ game.title }}</text>
+            <view class="icon-cover-wrap">
+              <image
+                v-if="coverOf(game)"
+                class="icon-cover"
+                :src="coverOf(game)"
+                mode="aspectFill"
+                @click="goGame(game.id)"
+              />
+              <view
+                v-else
+                class="icon-cover icon-fallback"
+                :style="{ background: game.coverColor }"
+                @click="goGame(game.id)"
+              >
+                <text class="icon-fallback-text">{{ game.title }}</text>
+              </view>
+              <view class="icon-marks" @click="goGame(game.id)">
+                <view class="icon-mark">
+                  <MarkIcon :name="game.status" :size="28" :color="theme.accent" />
+                </view>
+                <view class="icon-mark">
+                  <MarkIcon
+                    :name="game.onShelf ? 'shelfOn' : 'shelf'"
+                    :size="28"
+                    :color="theme.accent"
+                  />
+                </view>
+              </view>
             </view>
-            <view class="icon-meta" @click="goGame(game.id)">
-              <text class="icon-name" :style="{ color: theme.text }">{{ game.title }}</text>
-              <text class="mini-badge" :style="badgeOf(game)">{{ statusLabels[game.status] }}</text>
-            </view>
-            <text
-              class="show-btn"
-              :style="{ color: theme.accent }"
-              @click.stop="toggleShelf(game.id)"
-            >
-              {{ game.onShelf ? '展示中' : '书架展示' }}
+            <text class="icon-name icon-title" :style="{ color: theme.text }" @click="goGame(game.id)">
+              {{ game.title }}
             </text>
           </view>
         </view>
@@ -157,20 +165,20 @@
             <!-- #ifndef H5 -->
             <view
               class="plain-fade"
-              :style="{ background: `linear-gradient(to right, transparent 32%, ${theme.pageBg} 78%)` }"
+              :style="{ background: `linear-gradient(to right, transparent 18%, ${theme.pageBg} 78%)` }"
             />
             <!-- #endif -->
             <view class="plain-mid" @click="goGame(game.id)">
               <text class="plain-name" :style="{ color: theme.text }">{{ game.title }}</text>
-              <text class="mini-badge" :style="badgeOf(game)">{{ statusLabels[game.status] }}</text>
             </view>
-            <text
-              class="show-btn"
-              :style="{ color: theme.accent }"
-              @click.stop="toggleShelf(game.id)"
-            >
-              {{ game.onShelf ? '展示中' : '书架展示' }}
-            </text>
+            <view class="plain-icons" @click="goGame(game.id)">
+              <MarkIcon :name="game.status" :size="28" :color="theme.accent" />
+              <MarkIcon
+                :name="game.onShelf ? 'shelfOn' : 'shelf'"
+                :size="28"
+                :color="theme.accent"
+              />
+            </view>
           </view>
         </view>
         <view v-else class="empty">
@@ -208,9 +216,9 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PackShelf from '../../components/PackShelf.vue'
+import MarkIcon from '../../components/MarkIcon.vue'
 import {
   gameCover,
-  getGame,
   listMyGamesByPlatform,
   listMyGamesFiltered,
   listShelfGames,
@@ -218,12 +226,11 @@ import {
   PLATFORMS,
   reloadFromStorage,
   removeGame,
-  setOnShelf,
 } from '../../services/catalog'
 import { consumeHomeStatus } from '../../services/home-intent'
 import { getStoreTheme } from '../../theme/store'
 import type { Game, Platform, PlayStatus } from '../../types/catalog'
-import { PLAY_STATUSES, STATUS_COLORS, STATUS_LABELS } from '../../types/catalog'
+import { PLAY_STATUSES, STATUS_LABELS } from '../../types/catalog'
 
 const platforms = PLATFORMS
 const labels = PLATFORM_LABELS
@@ -363,7 +370,7 @@ const platformThumbStyle = computed(() =>
 const statusThumbStyle = computed(() =>
   thumbBox(
     'status',
-    statusItems.map((item) => (item === 'all' ? theme.value.accent : STATUS_COLORS[item])),
+    statusItems.map(() => theme.value.tabActiveBg),
   ),
 )
 
@@ -380,11 +387,15 @@ function platformTextStyle(item: Platform) {
 
 function statusTextStyle(item: StatusItem) {
   const on = statusItems[segHighlight('status')] === item
-  if (!on) return { color: theme.value.muted, fontWeight: 400 }
   return {
-    color: item === 'all' || item === 'shelved' ? '#ffffff' : '#1a1a1a',
-    fontWeight: 600,
+    color: on ? theme.value.tabActiveText : theme.value.muted,
+    fontWeight: on ? 600 : 400,
   }
+}
+
+function statusMarkColor(item: StatusItem) {
+  const on = statusItems[segHighlight('status')] === item
+  return on ? theme.value.tabActiveText : theme.value.accent
 }
 
 function segTextStyle(mode: 'icons' | 'list') {
@@ -429,13 +440,6 @@ onShow(() => {
   }
   refresh(true)
 })
-
-function badgeOf(game: Game) {
-  return {
-    background: STATUS_COLORS[game.status],
-    color: game.status === 'shelved' ? '#ffffff' : '#1a1a1a',
-  }
-}
 
 function coverOf(game: Game) {
   return gameCover(game)
@@ -545,15 +549,17 @@ function hasPoint(event: PointEvent) {
   return typeof x === 'number' && !Number.isNaN(x)
 }
 
-function onSegPointerDown(id: SegId, event: PointEvent) {
-  if (!hasPoint(event)) return
+function onSegPointerDown(id: SegId, event: PointerEvent) {
+  const point = event as unknown as PointEvent
+  if (!hasPoint(point)) return
   usingPointer = true
-  beginSeg(id, event)
+  beginSeg(id, point)
 }
 
-function onSegTouchStart(id: SegId, event: PointEvent) {
-  if (usingPointer || !hasPoint(event)) return
-  beginSeg(id, event)
+function onSegTouchStart(id: SegId, event: TouchEvent) {
+  const point = event as unknown as PointEvent
+  if (usingPointer || !hasPoint(point)) return
+  beginSeg(id, point)
 }
 
 const nativeSegs: Array<{
@@ -572,7 +578,7 @@ function bindNativeSegs() {
     const down = (event: PointerEvent) => {
       if (event.button !== 0) return
       usingPointer = true
-      beginSeg(id, event)
+      beginSeg(id, event as unknown as PointEvent)
     }
     const move = (event: PointerEvent) => onSegMove(event)
     const up = (event: PointerEvent) => onSegUp(event)
@@ -597,10 +603,11 @@ function unbindNativeSegs() {
 onMounted(bindNativeSegs)
 onUnmounted(unbindNativeSegs)
 
-function onSegMove(event: PointEvent) {
-  if (!hasPoint(event)) return
+function onSegMove(event: PointerEvent | TouchEvent) {
+  const raw = event as unknown as PointEvent
+  if (!hasPoint(raw)) return
   if (!segKey || !segFromThumb || !segBox) return
-  const point = eventPoint(event)
+  const point = eventPoint(raw)
   const dx = point.x - segStartX
   const dy = point.y - segStartY
   if (!segDecided) {
@@ -650,9 +657,10 @@ function finishSeg(event: PointEvent) {
   if (landed !== origin) commitSeg(id, landed)
 }
 
-function onSegUp(event: PointEvent) {
-  if (!hasPoint(event)) return
-  finishSeg(event)
+function onSegUp(event: PointerEvent | TouchEvent) {
+  const raw = event as unknown as PointEvent
+  if (!hasPoint(raw)) return
+  finishSeg(raw)
 }
 
 function onItemClick(id: SegId, index: number) {
@@ -661,29 +669,6 @@ function onItemClick(id: SegId, index: number) {
     return
   }
   commitSeg(id, index)
-}
-
-function toggleShelf(id: string) {
-  const game = getGame(id)
-  if (!game) return
-  if (game.onShelf) {
-    unshelf(id)
-    return
-  }
-  const updated = setOnShelf(id, true)
-  if (!updated) {
-    uni.showToast({ title: '这个平台的书架最多 8 本', icon: 'none' })
-    return
-  }
-  refresh(true)
-}
-
-function unshelf(id: string) {
-  if (!setOnShelf(id, false)) {
-    uni.showToast({ title: '移出失败', icon: 'none' })
-    return
-  }
-  refresh(false)
 }
 
 function goGame(id: string) {
@@ -717,7 +702,7 @@ function goAdd() {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 32rpx 28rpx 160rpx;
+  padding: 32rpx 28rpx calc(260rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
@@ -752,6 +737,18 @@ function goAdd() {
 
 .seg-label {
   font-size: 24rpx;
+}
+
+.status-seg .status-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  min-width: 0;
+}
+
+.status-pair-label {
+  font-size: 20rpx;
 }
 
 .shelf-empty {
@@ -877,13 +874,15 @@ function goAdd() {
   white-space: nowrap;
 }
 
-.mini-badge {
-  flex-shrink: 0;
-  font-size: 18rpx;
-  font-weight: 700;
-  line-height: 1.3;
-  padding: 2rpx 8rpx;
-  border-radius: 999rpx;
+.icon-meta {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4rpx;
+}
+
+.icon-name {
+  width: 100%;
+  flex: none;
 }
 
 .show-btn {
@@ -903,10 +902,8 @@ function goAdd() {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 12rpx;
-  height: 168rpx;
-  padding: 0 20rpx 0 58%;
+  height: 148rpx;
+  padding: 0 96rpx 0 50%;
   box-sizing: border-box;
   border-radius: 24rpx;
   overflow: hidden;
@@ -924,8 +921,8 @@ function goAdd() {
 
 /* #ifdef H5 */
 .plain-cover {
-  -webkit-mask-image: linear-gradient(to right, #000 32%, transparent 78%);
-  mask-image: linear-gradient(to right, #000 32%, transparent 78%);
+  -webkit-mask-image: linear-gradient(to right, #000 18%, transparent 78%);
+  mask-image: linear-gradient(to right, #000 18%, transparent 78%);
 }
 /* #endif */
 
@@ -955,14 +952,64 @@ function goAdd() {
   position: relative;
   z-index: 2;
   flex: 1;
+  min-width: 0;
   margin-top: 0;
+  align-items: center;
 }
 
-.plain-row .show-btn {
-  position: relative;
+.plain-row .plain-name {
+  width: 100%;
+  flex: none;
+  font-size: 26rpx;
+  line-height: 1.3;
+  font-weight: 700;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.plain-icons {
+  position: absolute;
+  right: 16rpx;
+  bottom: 12rpx;
   z-index: 2;
-  margin-top: 0;
-  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.icon-cover-wrap {
+  position: relative;
+}
+
+.icon-marks {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  z-index: 2;
+  display: flex;
+  gap: 6rpx;
+}
+
+.icon-mark {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-title {
+  display: -webkit-box;
+  margin-top: 8rpx;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .list-anim {

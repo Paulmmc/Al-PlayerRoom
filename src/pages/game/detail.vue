@@ -34,17 +34,78 @@
         </text>
       </view>
       <text class="summary" :style="{ color: theme.muted }">{{ game.summary }}</text>
-      <view class="status-row">
-        <view
-          v-for="item in playStatuses"
-          :key="item"
-          class="status-chip"
-          :style="statusChipStyle(item)"
-          @click="setStatus(item)"
-        >
-          <text class="status-chip-text" :style="{ color: statusChipStyle(item).color }">
-            {{ statusLabels[item] }}
-          </text>
+      <view class="menus">
+        <SlidePick
+          :options="statusOptions"
+          :value="game.status"
+          :track="segTrack"
+          :thumb="theme.tabActiveBg"
+          :active="theme.tabActiveText"
+          :muted="theme.muted"
+          :accent="theme.accent"
+          @pick="setStatus"
+        />
+        <SlidePick
+          :options="shelfOptions"
+          :value="game.onShelf ? 'on' : 'off'"
+          :track="segTrack"
+          :thumb="theme.tabActiveBg"
+          :active="theme.tabActiveText"
+          :muted="theme.muted"
+          :accent="theme.accent"
+          @pick="setShelf"
+        />
+      </view>
+      <text class="plan-entry" :style="{ color: theme.accent }" @click="openPlan">安排游玩</text>
+      <view v-if="planOpen" id="plan-form" class="journal-form" :style="{ background: theme.cardBg }">
+        <SlidePick
+          :options="planModes"
+          :value="planForm.mode"
+          :track="segTrack"
+          :thumb="theme.tabActiveBg"
+          :active="theme.tabActiveText"
+          :muted="theme.muted"
+          :accent="theme.accent"
+          @pick="planForm.setMode"
+        />
+        <scroll-view class="plan-scroll" scroll-x enable-flex>
+          <view
+            v-for="item in library"
+            :key="item.id"
+            class="plan-game"
+            :class="{ on: item.id === planGameId }"
+            @click="planGameId = item.id"
+          >
+            <image v-if="item.coverImage" class="plan-cover" :src="item.coverImage" mode="aspectFill" />
+            <text class="plan-name" :style="{ color: theme.text }">{{ item.title }}</text>
+            <text class="plan-platform" :style="{ color: theme.muted }">{{ platformLabels[item.platform] }}</text>
+          </view>
+        </scroll-view>
+        <template v-if="planForm.mode === 'day'">
+          <picker mode="date" :value="planForm.dayText" @change="onPlanDate">
+            <view class="journal-date" :style="{ color: theme.text }">{{ planForm.dayText }}</view>
+          </picker>
+        </template>
+        <template v-else>
+          <text class="plan-platform" :style="{ color: theme.muted }">开始日期</text>
+          <picker mode="date" :value="planForm.startText" @change="onPlanStart">
+            <view class="journal-date" :style="{ color: theme.text }">{{ planForm.startText }}</view>
+          </picker>
+          <text class="plan-platform" :style="{ color: theme.muted }">结束日期</text>
+          <picker mode="date" :value="planForm.endText" @change="onPlanEnd">
+            <view class="journal-date" :style="{ color: theme.text }">{{ planForm.endText }}</view>
+          </picker>
+          <text v-if="planView.total != null" class="plan-platform" :style="{ color: theme.muted }">共 {{ planView.total }} 天</text>
+          <text v-if="planView.added != null" class="plan-platform" :style="{ color: theme.muted }">新增 {{ planView.added }} 天，跳过 {{ planView.skipped }} 天</text>
+        </template>
+        <text v-if="planView.reason" class="plan-platform" :style="{ color: theme.muted }">{{ planView.reason }}</text>
+        <view class="journal-actions">
+          <text class="journal-cancel" :style="{ color: theme.muted }" @click="planOpen = false">取消</text>
+          <text
+            class="journal-save"
+            :style="{ color: planView.reason ? theme.muted : theme.accent }"
+            @click="savePlan"
+          >加入排期</text>
         </view>
       </view>
       <view class="note-box">
@@ -81,62 +142,99 @@
       >
         还没有记录
       </text>
-      <view v-if="journalOpen" class="journal-form" :style="{ background: theme.cardBg }">
-        <picker mode="date" :value="journalDate" @change="onJournalDate">
-          <view class="journal-date" :style="{ color: theme.text }">{{ journalDate }}</view>
-        </picker>
-        <textarea
-          class="journal-text"
-          v-model="journalText"
-          maxlength="200"
-          placeholder="写今天玩到哪了"
-          placeholder-class="note-placeholder"
-          :style="{ color: theme.text }"
-        />
-        <view class="journal-photo" @click="pickJournalImage">
-          <image
-            v-if="journalImage"
-            class="journal-photo-img"
-            :src="journalImage"
-            mode="aspectFill"
-          />
-          <text v-else class="journal-photo-hint" :style="{ color: theme.muted }">
-            贴一张图（可选）
-          </text>
+      <view v-if="journalOpen || game.journal.length" class="axis">
+        <view v-if="journalOpen" class="axis-row">
+          <view class="axis-side">
+            <text class="axis-date" :style="{ color: theme.muted }">{{ monthDayLabel(journalDate) }}</text>
+            <view class="axis-rail">
+              <view v-if="game.journal.length" class="axis-line" :style="{ background: theme.muted }" />
+              <view class="axis-dot hollow" :style="{ borderColor: theme.accent }" />
+            </view>
+          </view>
+          <view class="journal-form axis-card" :style="{ background: theme.cardBg }">
+            <picker mode="date" :value="journalDate" @change="onJournalDate">
+              <view class="journal-date" :style="{ color: theme.text }">{{ journalDate }}</view>
+            </picker>
+            <textarea
+              class="journal-text"
+              v-model="journalText"
+              maxlength="200"
+              placeholder="写今天玩到哪了"
+              placeholder-class="note-placeholder"
+              :style="{ color: theme.text }"
+            />
+            <view class="journal-photo" @click="pickJournalImage">
+              <image
+                v-if="journalImage"
+                class="journal-photo-img"
+                :src="journalImage"
+                mode="aspectFill"
+              />
+              <text v-else class="journal-photo-hint" :style="{ color: theme.muted }">
+                贴一张图（可选）
+              </text>
+            </view>
+            <text v-if="journalImage" class="journal-clear" @click.stop="journalImage = ''">
+              清除图片
+            </text>
+            <view class="journal-actions">
+              <text class="journal-cancel" :style="{ color: theme.muted }" @click="closeJournal">
+                取消
+              </text>
+              <text class="journal-save" :style="{ color: theme.accent }" @click="saveJournal">
+                保存
+              </text>
+            </view>
+          </view>
         </view>
-        <text v-if="journalImage" class="journal-clear" @click.stop="journalImage = ''">
-          清除图片
-        </text>
-        <view class="journal-actions">
-          <text class="journal-cancel" :style="{ color: theme.muted }" @click="closeJournal">
-            取消
-          </text>
-          <text class="journal-save" :style="{ color: theme.accent }" @click="saveJournal">
-            保存
-          </text>
-        </view>
-      </view>
-      <view
-        v-for="entry in game.journal"
-        :key="entry.id"
-        class="journal-item"
-        :style="{ background: theme.cardBg }"
-      >
-        <text class="journal-day" :style="{ color: theme.muted }">
-          {{ formatJournalDay(entry.at) }}
-        </text>
-        <text v-if="entry.text" class="journal-body" :style="{ color: theme.text }">
-          {{ entry.text }}
-        </text>
-        <image
-          v-if="entry.image"
-          class="journal-img"
-          :src="entry.image"
-          mode="aspectFill"
-        />
-        <view class="journal-actions">
-          <text :style="{ color: theme.accent }" @click="openJournal(entry)">改</text>
-          <text class="journal-delete" @click="confirmRemoveJournal(entry.id)">删除</text>
+        <view
+          v-for="row in journalRows"
+          :key="row.entry.id"
+          class="axis-row"
+        >
+          <view class="axis-side">
+            <text v-if="row.showDate" class="axis-date" :style="{ color: theme.muted }">
+              {{ row.monthDay }}
+            </text>
+            <text v-if="row.showYear" class="axis-year" :style="{ color: theme.muted }">
+              {{ row.year }}
+            </text>
+            <view class="axis-rail">
+              <view
+                v-if="!row.isLast"
+                class="axis-line"
+                :style="{ background: theme.muted }"
+              />
+              <view class="axis-dot" :style="{ background: theme.accent }" />
+            </view>
+          </view>
+          <view
+            class="axis-card"
+            :style="{ background: theme.cardBg }"
+            @touchstart="holdStart(row.entry.id, $event)"
+            @touchmove="holdMove"
+            @touchend="holdEnd"
+            @touchcancel="holdEnd"
+            @mousedown="holdStart(row.entry.id, $event)"
+            @mousemove="holdMove"
+            @mouseup="holdEnd"
+            @mouseleave="holdCancel"
+            @click="onJournalCardClick(row.entry.id)"
+          >
+            <image
+              v-if="row.entry.image"
+              class="journal-img"
+              :src="row.entry.image"
+              mode="aspectFill"
+            />
+            <text v-if="row.entry.text" class="journal-body" :style="{ color: theme.text }">
+              {{ row.entry.text }}
+            </text>
+            <view v-if="heldJournalId === row.entry.id" class="journal-actions" @click.stop>
+              <text :style="{ color: theme.accent }" @click="openJournal(row.entry)">编辑</text>
+              <text class="journal-delete" @click="confirmRemoveJournal(row.entry.id)">删除</text>
+            </view>
+          </view>
         </view>
       </view>
     </view>
@@ -156,33 +254,56 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { useLongPress } from '../../composables/useLongPress'
+import { planModes, usePlanRangeForm } from '../../composables/usePlanRangeForm'
 import {
   addJournalEntry,
   gameCover,
   getGame,
+  listMyGames,
   platformLabel,
   reloadFromStorage,
   removeGame,
   removeJournalEntry,
+  setOnShelf,
   updateGame,
   updateJournalEntry,
 } from '../../services/catalog'
 import { getStoreTheme } from '../../theme/store'
+import SlidePick from '../../components/SlidePick.vue'
+import type { ChoiceOption } from '../../components/choice-menus'
 import type { Game, JournalEntry, PlayStatus } from '../../types/catalog'
-import { PLAY_STATUSES, STATUS_COLORS, STATUS_LABELS } from '../../types/catalog'
+import { PLAY_STATUSES, PLATFORM_LABELS, STATUS_LABELS } from '../../types/catalog'
 
 const gameId = ref('')
 const game = ref<Game | undefined>()
 const note = ref('')
 const journalOpen = ref(false)
+const planOpen = ref(false)
+const planGameId = ref('')
+const planForm = usePlanRangeForm()
+const library = ref<Game[]>([])
+const planGame = computed(() => library.value.find((item) => item.id === planGameId.value))
+const planView = computed(() => planForm.describe(planGame.value))
+const platformLabels = PLATFORM_LABELS
+const heldJournalId = ref('')
+const journalHold = useLongPress()
 const editingJournalId = ref('')
 const journalDate = ref(todayText())
 const journalText = ref('')
 const journalImage = ref('')
-const playStatuses = PLAY_STATUSES
-const statusLabels = STATUS_LABELS
+const shelfOptions: ChoiceOption[] = [
+  { value: 'on', label: '上架', icon: 'shelfUp' },
+  { value: 'off', label: '下架', icon: 'shelfDown' },
+]
+const statusOptions = PLAY_STATUSES.map((item) => ({
+  value: item,
+  label: STATUS_LABELS[item],
+  icon: item,
+}))
+const segTrack = computed(() => theme.value.tabBg)
 
 const theme = computed(() =>
   getStoreTheme(game.value?.platform ?? 'steam'),
@@ -227,6 +348,57 @@ function formatJournalDay(at: number) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${date.getFullYear()}-${month}-${day}`
+}
+
+function monthDayLabel(value: string) {
+  const [year, month, day] = value.split('-')
+  return `${Number(month)}/${Number(day)}`
+}
+
+const journalRows = computed(() => {
+  const list = game.value?.journal ?? []
+  const thisYear = new Date().getFullYear()
+  return list.map((entry, index) => {
+    const date = new Date(entry.at)
+    const prev = index > 0 ? new Date(list[index - 1].at) : null
+    const sameDay =
+      !!prev &&
+      prev.getFullYear() === date.getFullYear() &&
+      prev.getMonth() === date.getMonth() &&
+      prev.getDate() === date.getDate()
+    return {
+      entry,
+      showDate: !sameDay,
+      showYear: !sameDay && (prev ? prev.getFullYear() !== date.getFullYear() : date.getFullYear() !== thisYear),
+      isLast: index === list.length - 1,
+      monthDay: `${date.getMonth() + 1}/${date.getDate()}`,
+      year: String(date.getFullYear()),
+    }
+  })
+})
+
+function holdStart(id: string, event: TouchEvent | MouseEvent) {
+  journalHold.start(event, () => {
+    heldJournalId.value = id
+  })
+}
+
+function holdMove(event: TouchEvent | MouseEvent) {
+  journalHold.move(event)
+}
+
+function holdEnd() {
+  journalHold.end()
+}
+
+function holdCancel() {
+  holdEnd()
+}
+
+function onJournalCardClick(id: string) {
+  if (journalHold.takeSuppressedClick()) return
+  if (heldJournalId.value === id) heldJournalId.value = ''
+  else if (heldJournalId.value) heldJournalId.value = ''
 }
 
 function dayStamp(value: string) {
@@ -349,22 +521,9 @@ onShow(() => {
   refresh()
 })
 
-function statusChipStyle(item: PlayStatus) {
-  const active = game.value?.status === item
-  const color = STATUS_COLORS[item]
-  return {
-    background: active ? color : 'transparent',
-    borderColor: color,
-    color: active ? '#1a1a1a' : theme.value.text,
-  }
-}
-
-function saveNote() {
-  if (!game.value) return
-  const next = note.value.trim().slice(0, 40)
-  note.value = next
-  if (next === game.value.note) return
-  const updated = updateGame(game.value.id, { note: next })
+function setStatus(next: string) {
+  if (!game.value || game.value.status === next) return
+  const updated = updateGame(game.value.id, { status: next as PlayStatus })
   if (!updated) {
     uni.showToast({ title: '保存失败', icon: 'none' })
     return
@@ -372,9 +531,60 @@ function saveNote() {
   game.value = updated
 }
 
-function setStatus(next: PlayStatus) {
-  if (!game.value || game.value.status === next) return
-  const updated = updateGame(game.value.id, { status: next })
+function openPlan() {
+  reloadFromStorage()
+  library.value = listMyGames()
+  planGameId.value = game.value?.id ?? ''
+  planForm.reset(Date.now())
+  planOpen.value = true
+  revealPlanForm()
+}
+
+async function revealPlanForm() {
+  await nextTick()
+  uni.pageScrollTo({ selector: '#plan-form', duration: 200 })
+}
+
+function onPlanDate(event: { detail: { value: string } }) {
+  planForm.dayText = event.detail.value
+}
+
+function onPlanStart(event: { detail: { value: string } }) {
+  planForm.startText = event.detail.value
+}
+
+function onPlanEnd(event: { detail: { value: string } }) {
+  planForm.endText = event.detail.value
+}
+
+function savePlan() {
+  const outcome = planForm.save(planGame.value)
+  if (outcome.toast) uni.showToast({ title: outcome.toast, icon: 'none' })
+  if (!outcome.close) return
+  planOpen.value = false
+}
+
+function setShelf(next: string) {
+  if (!game.value) return
+  const on = next === 'on'
+  if (game.value.onShelf === on) return
+  const updated = setOnShelf(game.value.id, on)
+  if (on && !updated) {
+    uni.showToast({ title: '这个平台的书架最多 8 本', icon: 'none' })
+    return
+  }
+  if (!updated) {
+    uni.showToast({ title: '移出失败', icon: 'none' })
+    return
+  }
+  game.value = updated
+}
+function saveNote() {
+  if (!game.value) return
+  const next = note.value.trim().slice(0, 40)
+  note.value = next
+  if (next === game.value.note) return
+  const updated = updateGame(game.value.id, { note: next })
   if (!updated) {
     uni.showToast({ title: '保存失败', icon: 'none' })
     return
@@ -530,6 +740,49 @@ function confirmDelete() {
   font-weight: 700;
 }
 
+.menus {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.plan-entry {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.plan-scroll {
+  white-space: nowrap;
+  margin-bottom: 12rpx;
+}
+
+.plan-game {
+  display: inline-flex;
+  width: 140rpx;
+  margin-right: 12rpx;
+  opacity: 0.5;
+}
+
+.plan-game.on {
+  opacity: 1;
+}
+
+.plan-cover {
+  width: 140rpx;
+  height: 80rpx;
+  border-radius: 8rpx;
+}
+
+.plan-name {
+  font-size: 22rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .note-box {
   margin-top: 20rpx;
   border-radius: 12rpx;
@@ -571,6 +824,77 @@ function confirmDelete() {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16rpx;
+}
+
+.axis-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.axis-side {
+  width: 144rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  position: relative;
+}
+
+.axis-date,
+.axis-year {
+  width: 72rpx;
+  font-size: 22rpx;
+  line-height: 1.3;
+  text-align: right;
+  padding-top: 2rpx;
+}
+
+.axis-year {
+  position: absolute;
+  left: 0;
+  top: 32rpx;
+  width: 72rpx;
+}
+
+.axis-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 72rpx;
+}
+
+.axis-line {
+  position: absolute;
+  left: 28rpx;
+  top: 16rpx;
+  bottom: -16rpx;
+  width: 2rpx;
+  opacity: 0.45;
+}
+
+.axis-dot {
+  position: absolute;
+  left: 20rpx;
+  top: 8rpx;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 999rpx;
+}
+
+.axis-dot.hollow {
+  background: transparent;
+  border-width: 2rpx;
+  border-style: solid;
+  box-sizing: border-box;
+}
+
+.axis-card {
+  flex: 1;
+  min-width: 0;
+  margin: 0 0 20rpx;
+  border-radius: 16rpx;
+  padding: 16rpx;
+  box-sizing: border-box;
 }
 
 .journal-add,

@@ -20,18 +20,16 @@
       <text class="fallback-text">{{ game.title }}</text>
     </view>
     <view class="eshop-body">
-      <view class="title-row">
-        <text class="eshop-title">{{ game.title }}</text>
-        <text class="status-badge" :style="badgeStyle">{{ statusLabel }}</text>
-      </view>
+      <text class="eshop-title">{{ game.title }}</text>
       <view class="eshop-tags">
         <text v-for="tag in game.tags.slice(0, 2)" :key="tag" class="eshop-tag">
           {{ tag }}
         </text>
-        <text class="shelf-action shelf-action-eshop" @click.stop="emit('shelf', game.id)">
-          {{ game.onShelf ? '展示中' : '书架展示' }}
-        </text>
       </view>
+    </view>
+    <view class="card-icons" @click.stop="emit('open', game.id)">
+      <MarkIcon :name="game.status" :size="28" :color="theme.accent" />
+      <MarkIcon :name="game.onShelf ? 'shelfOn' : 'shelf'" :size="28" :color="theme.accent" />
     </view>
   </view>
 
@@ -56,14 +54,12 @@
     <view class="ps-gradient" />
     <view class="ps-body">
       <text class="ps-kicker">PS5</text>
-      <view class="title-row">
-        <text class="ps-title">{{ game.title }}</text>
-        <text class="status-badge" :style="badgeStyle">{{ statusLabel }}</text>
-      </view>
+      <text class="ps-title">{{ game.title }}</text>
       <text class="ps-summary">{{ game.summary }}</text>
-      <text class="shelf-action shelf-action-light" @click.stop="emit('shelf', game.id)">
-        {{ game.onShelf ? '展示中' : '书架展示' }}
-      </text>
+    </view>
+    <view class="card-icons" @click.stop="emit('open', game.id)">
+      <MarkIcon :name="game.status" :size="28" :color="theme.accent" />
+      <MarkIcon :name="game.onShelf ? 'shelfOn' : 'shelf'" :size="28" :color="theme.accent" />
     </view>
   </view>
 
@@ -88,15 +84,9 @@
       <text class="fallback-text steam-fallback-text">{{ game.title.slice(0, 1) }}</text>
     </view>
     <view class="steam-body">
-      <view class="title-row">
-        <text class="steam-title">{{ game.title }}</text>
-        <text class="status-badge" :style="badgeStyle">{{ statusLabel }}</text>
-      </view>
+      <text class="steam-title">{{ game.title }}</text>
       <text class="steam-tags">{{ game.tags.join(' · ') }}</text>
       <text class="steam-summary">{{ game.summary }}</text>
-      <text class="shelf-action" @click.stop="emit('shelf', game.id)">
-        {{ game.onShelf ? '展示中' : '书架展示' }}
-      </text>
       <text
         v-if="removable"
         class="steam-delete"
@@ -105,14 +95,19 @@
         删除
       </text>
     </view>
+    <view class="card-icons" @click.stop="emit('open', game.id)">
+      <MarkIcon :name="game.status" :size="28" :color="theme.accent" />
+      <MarkIcon :name="game.onShelf ? 'shelfOn' : 'shelf'" :size="28" :color="theme.accent" />
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Game, Platform } from '../types/catalog'
-import { STATUS_COLORS, STATUS_LABELS } from '../types/catalog'
 import { gameCover } from '../services/catalog'
+import { getStoreTheme } from '../theme/store'
+import MarkIcon from './MarkIcon.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -131,11 +126,7 @@ const emit = defineEmits<{
 }>()
 
 const cover = computed(() => gameCover(props.game))
-const statusLabel = computed(() => STATUS_LABELS[props.game.status])
-const badgeStyle = computed(() => ({
-  background: STATUS_COLORS[props.game.status],
-  color: props.game.status === 'shelved' ? '#ffffff' : '#1a1a1a',
-}))
+const theme = computed(() => getStoreTheme(props.platform))
 
 const animStyle = computed(() => ({
   animationDelay: `${Math.min(props.index, 8) * 50}ms`,
@@ -187,13 +178,12 @@ const animStyle = computed(() => ({
   margin-bottom: 10rpx;
 }
 
+.status-word,
 .status-badge {
   flex-shrink: 0;
-  font-size: 20rpx;
+  font-size: 22rpx;
   font-weight: 700;
-  line-height: 1.4;
-  padding: 4rpx 12rpx;
-  border-radius: 999rpx;
+  line-height: 1.3;
 }
 
 .eshop-cover {
@@ -213,9 +203,30 @@ const animStyle = computed(() => ({
   padding: 16rpx 18rpx 20rpx;
 }
 
+.eshop-card,
+.ps-card,
+.steam-card {
+  position: relative;
+}
+
+.card-icons {
+  position: absolute;
+  right: 16rpx;
+  bottom: 16rpx;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.eshop-body,
+.ps-body,
+.steam-body {
+  padding-bottom: 64rpx;
+}
+
 .eshop-title {
-  flex: 1;
-  min-width: 0;
+  display: block;
   color: #1a1a1a;
   font-size: 26rpx;
   font-weight: 700;
@@ -269,7 +280,7 @@ const animStyle = computed(() => ({
   position: relative;
   z-index: 1;
   height: 100%;
-  padding: 36rpx 32rpx;
+  padding: 36rpx 32rpx 72rpx;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -329,7 +340,7 @@ const animStyle = computed(() => ({
 
 .steam-body {
   flex: 1;
-  padding: 20rpx 22rpx;
+  padding: 20rpx 22rpx 64rpx;
   display: flex;
   flex-direction: column;
   min-width: 0;

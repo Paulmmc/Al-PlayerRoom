@@ -1,5 +1,5 @@
 <template>
-  <view v-if="ready" class="page">
+  <view v-if="ready" class="page" :style="pageTheme">
     <view class="cover-wrap" @click="pickCover">
       <image
         v-if="coverImage"
@@ -77,17 +77,32 @@
 
     <view class="field">
       <text class="label">状态</text>
-      <view class="platform-tabs">
-        <view
-          v-for="item in playStatuses"
-          :key="item"
-          class="tab"
-          :class="{ active: status === item }"
-          @click="status = item"
-        >
-          <text class="tab-text">{{ statusLabels[item] }}</text>
-        </view>
-      </view>
+      <ChoiceMenu
+        :open="openMenu === 'status'"
+        :value="status"
+        :options="statusOptions"
+        :accent="theme.accent"
+        :text="theme.text"
+        :menu-bg="theme.cardBg"
+        @toggle="toggleMenu('status')"
+        @close="openMenu = null"
+        @pick="pickStatus"
+      />
+    </view>
+
+    <view class="field">
+      <text class="label">展示</text>
+      <ChoiceMenu
+        :open="openMenu === 'shelf'"
+        :value="onShelf ? 'showing' : 'shelf'"
+        :options="shelfOptions"
+        :accent="theme.accent"
+        :text="theme.text"
+        :menu-bg="theme.cardBg"
+        @toggle="toggleMenu('shelf')"
+        @close="openMenu = null"
+        @pick="pickShelf"
+      />
     </view>
 
     <view class="field">
@@ -139,15 +154,19 @@ import {
   PLATFORM_LABELS,
   PLATFORMS,
   reloadFromStorage,
+  setOnShelf,
   updateGame,
 } from '../../services/catalog'
+import { getStoreTheme } from '../../theme/store'
+import ChoiceMenu from '../../components/ChoiceMenu.vue'
+import { SHELF_MENU, STATUS_MENU } from '../../components/choice-menus'
 import type { Game, Platform, PlayStatus } from '../../types/catalog'
-import { PLAY_STATUSES, STATUS_LABELS } from '../../types/catalog'
 
 const platforms = PLATFORMS
 const labels = PLATFORM_LABELS
-const playStatuses = PLAY_STATUSES
-const statusLabels = STATUS_LABELS
+const statusOptions = STATUS_MENU
+const shelfOptions = SHELF_MENU
+const openMenu = ref<'status' | 'shelf' | null>(null)
 
 const ready = ref(false)
 const isCreate = ref(false)
@@ -160,6 +179,17 @@ const coverColor = ref('#2a3350')
 const coverImage = ref<string | undefined>()
 const tags = ref<string[]>([])
 const status = ref<PlayStatus>('backlog')
+const onShelf = ref(false)
+const theme = computed(() => getStoreTheme(platform.value))
+const pageTheme = computed(() => ({
+  background: theme.value.pageBg,
+  color: theme.value.text,
+  '--field': theme.value.cardBg,
+  '--quiet': theme.value.muted,
+  '--accent': theme.value.accent,
+  '--on-accent': theme.value.tabActiveText,
+  '--track': theme.value.tabBg,
+}))
 const note = ref('')
 const selectedCatalogId = ref('')
 
@@ -217,6 +247,7 @@ onLoad((query) => {
   coverColor.value = game.coverColor
   coverImage.value = game.coverImage || undefined
   status.value = game.status
+  onShelf.value = game.onShelf
   note.value = game.note
   ready.value = true
   uni.setNavigationBarTitle({ title: '编辑游戏' })
@@ -268,6 +299,27 @@ function pickCover() {
   })
 }
 
+function toggleMenu(which: 'status' | 'shelf') {
+  openMenu.value = openMenu.value === which ? null : which
+}
+
+function pickStatus(value: string) {
+  status.value = value as PlayStatus
+  openMenu.value = null
+}
+
+function pickShelf(value: string) {
+  onShelf.value = value === 'shelf'
+  openMenu.value = null
+}
+
+function applyShelf(id: string) {
+  const updated = setOnShelf(id, onShelf.value)
+  if (onShelf.value && !updated) {
+    uni.showToast({ title: '这个平台的书架最多 8 本', icon: 'none' })
+  }
+}
+
 function save() {
   if (!ready.value || saving.value) return
   const nextTitle = String(title.value ?? '').trim()
@@ -288,6 +340,7 @@ function save() {
       status: status.value,
       note: note.value,
     })
+    applyShelf(created.id)
     saving.value = false
     uni.showToast({ title: '已添加', icon: 'success' })
     setTimeout(() => {
@@ -304,11 +357,13 @@ function save() {
     status: status.value,
     note: note.value,
   })
-  saving.value = false
   if (!updated) {
     uni.showToast({ title: '保存失败', icon: 'none' })
+    saving.value = false
     return
   }
+  applyShelf(updated.id)
+  saving.value = false
   uni.showToast({ title: '已保存', icon: 'success' })
   setTimeout(() => {
     uni.navigateBack()
@@ -320,7 +375,6 @@ function save() {
 .page {
   min-height: 100vh;
   padding: 28rpx 28rpx 60rpx;
-  background: #0f1219;
   box-sizing: border-box;
 }
 
@@ -397,7 +451,7 @@ function save() {
   width: 140rpx;
   height: 160rpx;
   border-radius: 12rpx;
-  background: #1a1f2e;
+  background: var(--field);
   border: 4rpx solid transparent;
   box-sizing: border-box;
 }
@@ -416,7 +470,7 @@ function save() {
 
 .catalog-name {
   margin-top: 8rpx;
-  color: #c5cad6;
+  color: inherit;
   font-size: 20rpx;
   line-height: 1.3;
   white-space: normal;
@@ -435,7 +489,7 @@ function save() {
 
 .label {
   display: block;
-  color: #f2f4f8;
+  color: inherit;
   font-size: 26rpx;
   font-weight: 600;
   margin-bottom: 12rpx;
@@ -446,7 +500,7 @@ function save() {
   height: 88rpx;
   padding: 0 24rpx;
   border-radius: 16rpx;
-  background: #1a1f2e;
+  background: var(--field);
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -456,7 +510,7 @@ function save() {
   width: 100%;
   height: 88rpx;
   line-height: 88rpx;
-  color: #f2f4f8;
+  color: inherit;
   font-size: 28rpx;
   background: transparent;
 }
@@ -480,20 +534,20 @@ function save() {
   min-height: 160rpx;
   padding: 20rpx 24rpx;
   border-radius: 16rpx;
-  background: #1a1f2e;
-  color: #f2f4f8;
+  background: var(--field);
+  color: inherit;
   font-size: 28rpx;
   line-height: 1.5;
   box-sizing: border-box;
 }
 
 .placeholder {
-  color: #6b7388;
+  color: var(--quiet);
 }
 
 .platform-tabs {
   display: flex;
-  background: #1a1f2e;
+  background: var(--track);
   border-radius: 16rpx;
   padding: 6rpx;
 }
@@ -508,17 +562,17 @@ function save() {
 }
 
 .tab.active {
-  background: #2a3350;
+  background: var(--accent);
 }
 
 .tab-text {
-  color: #8a93a8;
+  color: var(--quiet);
   font-size: 26rpx;
   font-weight: 600;
 }
 
 .tab.active .tab-text {
-  color: #f2f4f8;
+  color: var(--on-accent);
 }
 
 .save-btn {
@@ -526,8 +580,8 @@ function save() {
   height: 88rpx;
   line-height: 88rpx;
   border-radius: 16rpx;
-  background: #7c5cff;
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   font-size: 30rpx;
   font-weight: 600;
 }

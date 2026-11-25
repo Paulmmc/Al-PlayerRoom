@@ -8,8 +8,35 @@ import type {
   Platform,
   PlayStatus,
   Player,
-  JournalEntry,
 } from '../types/catalog'
+import {
+  CURRENT_PLAYER_ID,
+  PLATFORM_LABELS,
+  PLATFORMS,
+} from '../types/catalog'
+import {
+  findMyGameIndex,
+  getGames,
+  reloadFromStorage,
+  replaceGame,
+  saveGames,
+  setGames,
+} from './game-store'
+import { isPlayStatus, normalizeGame, normalizeNote } from './normalize'
+
+export { addJournalEntry, removeJournalEntry, updateJournalEntry } from './journal'
+export {
+  addPlayPlan,
+  addPlayPlans,
+  explainPlanRange,
+  newerPlanFirst,
+  removePlayPlan,
+  reschedulePlayPlan,
+  togglePlayPlan,
+} from './plans'
+export { dateInputText, parseDateInput } from './plan-range'
+export { localMidnight } from './normalize'
+export { reloadFromStorage, resetLibrary } from './game-store'
 
 const COVER_COLORS = [
   '#2F6B4A',
@@ -21,189 +48,9 @@ const COVER_COLORS = [
   '#7C5CFF',
   '#2EC4B6',
 ]
-import {
-  CURRENT_PLAYER_ID,
-  PLATFORM_LABELS,
-  PLATFORMS,
-  PLAY_STATUSES,
-} from '../types/catalog'
-
-const STORAGE_KEY = 'playerroom.games'
-
-let games: Game[] = loadGames()
-// Rewrite storage into the new schema while keeping edits
-persist()
-
-function isCustomCover(coverImage?: string): boolean {
-  if (!coverImage) return false
-  return (
-    coverImage.startsWith('data:') ||
-    coverImage.startsWith('blob:') ||
-    coverImage.startsWith('wxfile:') ||
-    coverImage.startsWith('file:')
-  )
-}
-
-function normalizeNote(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  return value.trim().slice(0, 40)
-}
-
-function isPlayStatus(value: unknown): value is PlayStatus {
-  return PLAY_STATUSES.includes(value as PlayStatus)
-}
-
-function resolveStatus(game: Game): PlayStatus {
-  if (isPlayStatus(game.status)) return game.status
-  const seed = seedGames.find((item) => item.id === game.id)
-  if (seed && isPlayStatus(seed.status)) return seed.status
-  return 'backlog'
-}
-
-function resolveCover(game: Game): string {
-  const cover = game.coverImage || ''
-  if (isCustomCover(cover)) return cover
-  if (cover.startsWith(`/static/games/${game.id}/`)) return cover
-  const title = game.title.trim()
-  const match = catalogGames.find(
-    (item) => item.platform === game.platform && item.title.trim() === title,
-  )
-  if (!match) return cover
-  const file = game.platform === 'steam' ? 'capsule.jpg' : 'cover.jpg'
-  return `/static/games/${match.id}/${file}`
-}
-
-function normalizeJournal(value: unknown): JournalEntry[] {
-  if (!Array.isArray(value)) return []
-  const entries: JournalEntry[] = []
-  for (const raw of value) {
-    if (!raw || typeof raw !== 'object') continue
-    const item = raw as Partial<JournalEntry>
-    if (!item.id) continue
-    const text = typeof item.text === 'string' ? item.text.trim().slice(0, 200) : ''
-    const image = typeof item.image === 'string' ? item.image : ''
-    if (!text && !image) continue
-    const at = typeof item.at === 'number' && Number.isFinite(item.at) ? item.at : Date.now()
-    entries.push({ id: String(item.id), at, text, image })
-  }
-  entries.sort((a, b) => b.at - a.at)
-  return entries.slice(0, 30)
-}
-
-function normalizeGame(game: Game & { screenshots?: unknown }): Game {
-  const { screenshots: _dropped, ...rest } = game
-  return {
-    ...rest,
-    tags: [...(game.tags || [])],
-    coverImage: resolveCover(game),
-    status: resolveStatus(game),
-    note: normalizeNote(game.note),
-    journal: normalizeJournal(game.journal),
-    onShelf:
-      typeof game.onShelf === 'boolean' ? game.onShelf : resolveStatus(game) === 'playing',
-    shelfAt: typeof game.shelfAt === 'number' && Number.isFinite(game.shelfAt) ? game.shelfAt : 0,
-  }
-}
-
-function cloneSeed(): Game[] {
-  return seedGames.map((game) => normalizeGame(game))
-}
-
-function mergeWithSeed(stored: Game[]): Game[] {
-  const seedById = new Map(seedGames.map((game) => [game.id, game]))
-  const storedIds = new Set(stored.map((game) => game.id))
-
-  const merged = stored
-    .filter(
-      (game) =>
-        game.playerId === CURRENT_PLAYER_ID && !String(game.id).startsWith('g-test-'),
-    )
-    .map((game) => {
-      const seed = seedById.get(game.id)
-      if (!seed) {
-        return normalizeGame({
-          ...game,
-          coverImage: game.coverImage || '',
-        })
-      }
-      return normalizeGame({
-        ...seed,
-        title: game.title || seed.title,
-        summary: game.summary ?? seed.summary,
-        platform: game.platform || seed.platform,
-        tags: game.tags?.length ? game.tags : seed.tags,
-        coverImage: isCustomCover(game.coverImage)
-          ? game.coverImage!
-          : seed.coverImage,
-        status: isPlayStatus(game.status) ? game.status : seed.status,
-        note: game.note === undefined ? seed.note : normalizeNote(game.note),
-        journal: game.journal === undefined ? seed.journal : normalizeJournal(game.journal),
-        onShelf: typeof game.onShelf === 'boolean' ? game.onShelf : seed.onShelf,
-        shelfAt:
-          typeof game.shelfAt === 'number' && Number.isFinite(game.shelfAt)
-            ? game.shelfAt
-            : seed.shelfAt,
-      })
-    })
-
-  const overlap = merged.some((game) => seedById.has(game.id))
-  if (!overlap) {
-    const userAdded = merged.filter((game) => game.id.startsWith('g-user-'))
-    return userAdded.length ? [...cloneSeed(), ...userAdded] : cloneSeed()
-  }
-
-  // Keep user order; append any brand-new seed titles not in storage
-  for (const seed of seedGames) {
-    if (!storedIds.has(seed.id)) {
-      merged.push(normalizeGame(seed))
-    }
-  }
-  return merged
-}
-
-function unwrapStorage(raw: unknown): unknown {
-  if (raw == null || raw === '') {
-    return null
-  }
-  let value: unknown = raw
-  if (typeof value === 'string') {
-    try {
-      value = JSON.parse(value)
-    } catch {
-      return null
-    }
-  }
-  // uni H5 may persist as { type: 'object', data: [...] }
-  if (
-    value &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    Array.isArray((value as { data?: unknown }).data)
-  ) {
-    return (value as { data: unknown[] }).data
-  }
-  return value
-}
-
-function loadGames(): Game[] {
-  try {
-    const raw = uni.getStorageSync(STORAGE_KEY)
-    const parsed = unwrapStorage(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return cloneSeed()
-    }
-    return mergeWithSeed(parsed as Game[])
-  } catch {
-    return cloneSeed()
-  }
-}
-
-function persist() {
-  uni.setStorageSync(STORAGE_KEY, games)
-}
 
 export function listMyGames(): Game[] {
-  return games.filter((game) => game.playerId === CURRENT_PLAYER_ID)
+  return getGames().filter((game) => game.playerId === CURRENT_PLAYER_ID)
 }
 
 /** 资料库：仅该平台的正例种子 + game-catalog（封面按平台循环本地图） */
@@ -280,26 +127,19 @@ export function setOnShelf(id: string, on: boolean): Game | undefined {
     index = findMyGameIndex(id)
     if (index < 0) return undefined
   }
-  const current = games[index]
+  const current = getGames()[index]
   if (on) {
     if (current.onShelf) return current
-    const occupied = games.filter(
+    const occupied = getGames().filter(
       (game) =>
         game.playerId === CURRENT_PLAYER_ID &&
         game.platform === current.platform &&
         game.onShelf,
     ).length
     if (occupied >= 8) return undefined
-    return writeShelf(index, true, Date.now())
+    return replaceGame(index, { ...current, onShelf: true, shelfAt: Date.now() })
   }
-  return writeShelf(index, false, 0)
-}
-
-function writeShelf(index: number, onShelf: boolean, shelfAt: number): Game {
-  const next: Game = { ...games[index], onShelf, shelfAt }
-  games = [...games.slice(0, index), next, ...games.slice(index + 1)]
-  persist()
-  return next
+  return replaceGame(index, { ...current, onShelf: false, shelfAt: 0 })
 }
 
 export function listGamesByPlatform(platform: Platform): Game[] {
@@ -355,18 +195,13 @@ export function searchGames(keyword: string): Game[] {
   return searchMyGames(keyword)
 }
 
-export function reloadFromStorage(): void {
-  games = loadGames()
-}
-
 export function updateGame(id: string, patch: GamePatch): Game | undefined {
-  const index = games.findIndex(
+  const index = getGames().findIndex(
     (game) => game.id === id && game.playerId === CURRENT_PLAYER_ID,
   )
   if (index < 0) {
-    // Storage may be newer than in-memory after HMR / multi-instance
     reloadFromStorage()
-    const retry = games.findIndex(
+    const retry = getGames().findIndex(
       (game) => game.id === id && game.playerId === CURRENT_PLAYER_ID,
     )
     if (retry < 0) {
@@ -378,7 +213,7 @@ export function updateGame(id: string, patch: GamePatch): Game | undefined {
 }
 
 function commitUpdate(index: number, patch: GamePatch): Game {
-  const current = games[index]
+  const current = getGames()[index]
   const nextTitle =
     patch.title !== undefined
       ? String(patch.title).trim() || current.title
@@ -387,7 +222,7 @@ function commitUpdate(index: number, patch: GamePatch): Game {
   let onShelf = current.onShelf
   let shelfAt = current.shelfAt
   if (nextPlatform !== current.platform && current.onShelf) {
-    const occupied = games.filter(
+    const occupied = getGames().filter(
       (game) =>
         game.id !== current.id &&
         game.playerId === CURRENT_PLAYER_ID &&
@@ -418,12 +253,11 @@ function commitUpdate(index: number, patch: GamePatch): Game {
     onShelf,
     shelfAt,
   }
-  games = [...games.slice(0, index), next, ...games.slice(index + 1)]
-  persist()
-  return next
+  return replaceGame(index, next)
 }
 
 export function addGame(input: AddGameInput): Game {
+  const games = getGames()
   const color = COVER_COLORS[games.length % COVER_COLORS.length]
   const game = normalizeGame({
     id: `g-user-${Date.now()}`,
@@ -437,111 +271,26 @@ export function addGame(input: AddGameInput): Game {
     status: isPlayStatus(input.status) ? input.status : 'backlog',
     note: normalizeNote(input.note),
     journal: [],
+    plans: [],
     onShelf: false,
     shelfAt: 0,
   })
-  games = [...games, game]
-  persist()
+  setGames([...games, game])
+  saveGames()
   return game
 }
 
-function findMyGameIndex(id: string): number {
-  return games.findIndex(
-    (game) => game.id === id && game.playerId === CURRENT_PLAYER_ID,
-  )
-}
-
-export function addJournalEntry(
-  gameId: string,
-  input: { at: number; text: string; image?: string },
-): Game | undefined {
-  const text = typeof input.text === 'string' ? input.text.trim() : ''
-  const image = typeof input.image === 'string' ? input.image : ''
-  if (!text && !image) return undefined
-  let index = findMyGameIndex(gameId)
-  if (index < 0) {
-    reloadFromStorage()
-    index = findMyGameIndex(gameId)
-    if (index < 0) return undefined
-  }
-  const current = games[index]
-  const entry: JournalEntry = {
-    id: `j-${Date.now()}`,
-    at: input.at,
-    text,
-    image,
-  }
-  return writeJournal(index, normalizeJournal([entry, ...current.journal]))
-}
-
-export function updateJournalEntry(
-  gameId: string,
-  entryId: string,
-  patch: { at?: number; text?: string; image?: string },
-): Game | undefined {
-  let index = findMyGameIndex(gameId)
-  if (index < 0) {
-    reloadFromStorage()
-    index = findMyGameIndex(gameId)
-    if (index < 0) return undefined
-  }
-  const current = games[index]
-  const found = current.journal.find((entry) => entry.id === entryId)
-  if (!found) return undefined
-  const text = patch.text !== undefined ? patch.text.trim() : found.text
-  const image = patch.image !== undefined ? patch.image : found.image
-  if (!text && !image) return undefined
-  const next = current.journal.map((entry) =>
-    entry.id === entryId
-      ? {
-          ...entry,
-          at: patch.at !== undefined ? patch.at : entry.at,
-          text,
-          image,
-        }
-      : entry,
-  )
-  return writeJournal(index, normalizeJournal(next))
-}
-
-export function removeJournalEntry(gameId: string, entryId: string): boolean {
-  let index = findMyGameIndex(gameId)
-  if (index < 0) {
-    reloadFromStorage()
-    index = findMyGameIndex(gameId)
-    if (index < 0) return false
-  }
-  const current = games[index]
-  if (!current.journal.some((entry) => entry.id === entryId)) return false
-  writeJournal(
-    index,
-    current.journal.filter((entry) => entry.id !== entryId),
-  )
-  return true
-}
-
-function writeJournal(index: number, journal: JournalEntry[]): Game {
-  const next: Game = { ...games[index], journal }
-  games = [...games.slice(0, index), next, ...games.slice(index + 1)]
-  persist()
-  return next
-}
-
 export function removeGame(id: string): boolean {
-  const before = games.length
-  games = games.filter(
+  const games = getGames()
+  const next = games.filter(
     (game) => !(game.id === id && game.playerId === CURRENT_PLAYER_ID),
   )
-  if (games.length === before) {
+  if (next.length === games.length) {
     return false
   }
-  persist()
+  setGames(next)
+  saveGames()
   return true
-}
-
-export function resetLibrary(): void {
-  games = cloneSeed()
-  uni.removeStorageSync(STORAGE_KEY)
 }
 
 export { PLATFORMS, PLATFORM_LABELS, CURRENT_PLAYER_ID }

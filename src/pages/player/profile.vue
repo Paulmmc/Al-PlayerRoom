@@ -16,9 +16,7 @@
         class="status-row"
         @click="openStatus(item)"
       >
-        <text class="status-name" :style="{ color: statusColors[item] }">
-          {{ statusLabels[item] }}
-        </text>
+        <MarkIcon :name="item" :size="28" :color="player.accent" />
         <text class="status-count">{{ counts[item] }}</text>
       </view>
     </view>
@@ -40,13 +38,12 @@ import {
 } from '../../services/catalog'
 import { requestHomeStatus } from '../../services/home-intent'
 import type { Player, PlayStatus } from '../../types/catalog'
-import { PLAY_STATUSES, STATUS_COLORS, STATUS_LABELS } from '../../types/catalog'
+import { PLAY_STATUSES } from '../../types/catalog'
+import MarkIcon from '../../components/MarkIcon.vue'
 
 const player = ref<Player | undefined>()
 const counts = ref(countMyGamesByStatus())
 const playStatuses = PLAY_STATUSES
-const statusLabels = STATUS_LABELS
-const statusColors = STATUS_COLORS
 
 const totalCount = computed(
   () =>

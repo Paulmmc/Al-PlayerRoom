@@ -11,7 +11,9 @@
     <view class="pack-shadow" />
     <!-- #ifndef MP -->
     <view class="pack-spine">
-      <view class="spine-status" :style="{ background: statusColor }" />
+      <view class="spine-state">
+        <MarkIcon :name="game.status" :size="24" color="#ffffff" />
+      </view>
       <text class="spine-title">{{ spineLabel }}</text>
       <view v-if="platform === 'switch'" class="spine-mark" />
     </view>
@@ -20,7 +22,9 @@
     <!-- #endif -->
     <!-- #ifdef MP -->
     <view class="pack-spine-flat">
-      <view class="spine-status" :style="{ background: statusColor }" />
+      <view class="spine-state">
+        <MarkIcon :name="game.status" :size="24" color="#ffffff" />
+      </view>
       <text class="spine-title">{{ spineLabel }}</text>
     </view>
     <!-- #endif -->
@@ -28,7 +32,6 @@
       <view class="pack-art">
         <image class="pack-img" :src="game.coverImage" mode="aspectFill" />
       </view>
-      <text class="face-status" :style="faceStatusStyle">{{ statusLabel }}</text>
       <view v-if="platform === 'switch'" class="pack-banner">
         <text class="banner-text">NINTENDO SWITCH</text>
         <view class="banner-mark" />
@@ -40,7 +43,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Game, Platform } from '../types/catalog'
-import { STATUS_COLORS, STATUS_LABELS } from '../types/catalog'
+import MarkIcon from './MarkIcon.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -59,20 +62,12 @@ const emit = defineEmits<{
   open: [id: string]
 }>()
 
+let isMp = false
 // #ifdef MP
-const isMp = true
-// #endif
-// #ifndef MP
-const isMp = false
+isMp = true
 // #endif
 
 const spineLabel = computed(() => props.game.title.slice(0, 22))
-const statusColor = computed(() => STATUS_COLORS[props.game.status])
-const statusLabel = computed(() => STATUS_LABELS[props.game.status])
-const faceStatusStyle = computed(() => ({
-  background: statusColor.value,
-  color: props.game.status === 'shelved' ? '#ffffff' : '#1a1a1a',
-}))
 
 function onFaceClick() {
   if (props.focus) {
@@ -84,32 +79,12 @@ function onFaceClick() {
 </script>
 
 <style scoped>
-.spine-status {
+.spine-state {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  z-index: 2;
-}
-
-.pack-spine .spine-status {
-  right: 0;
-}
-
-.pack-spine-flat .spine-status {
-  left: 0;
-}
-
-.face-status {
-  position: absolute;
-  top: 8px;
-  left: 8px;
+  top: 4px;
+  left: 50%;
   z-index: 3;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.2;
-  padding: 2px 6px;
-  border-radius: 999px;
+  transform: translateX(-50%);
 }
 
 .pack {

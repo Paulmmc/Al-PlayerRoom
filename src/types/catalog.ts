@@ -47,6 +47,14 @@ export interface JournalEntry {
   image: string
 }
 
+export interface PlayPlan {
+  id: string
+  /** Local midnight of the planned day */
+  at: number
+  /** false means not played yet */
+  played: boolean
+}
+
 export interface Game {
   id: string
   title: string
@@ -62,6 +70,8 @@ export interface Game {
   /** Player note, at most 40 characters */
   note: string
   journal: JournalEntry[]
+  /** Planned play days. Missing storage is treated as none. */
+  plans?: PlayPlan[]
   /** Whether this game sits on its platform shelf */
   onShelf: boolean
   /** Larger means closer to the front of the shelf. 0 when off the shelf */

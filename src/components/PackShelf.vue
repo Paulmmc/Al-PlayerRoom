@@ -33,19 +33,21 @@
       <view class="focus-copy" @click="onOpen(focusGame.id)">
         <view class="focus-title-row">
           <text class="focus-name" :style="{ color: text }">{{ focusGame.title }}</text>
-          <text class="status-badge" :style="badgeStyle">{{ statusLabel }}</text>
+          <view @click.stop="onOpen(focusGame.id)">
+            <MarkIcon :name="focusGame.status" :size="28" :color="accent || text" />
+          </view>
+          <view @click.stop="onOpen(focusGame.id)">
+            <MarkIcon
+              :name="focusGame.onShelf ? 'shelfOn' : 'shelf'"
+              :size="28"
+              :color="accent || text"
+            />
+          </view>
         </view>
         <text class="focus-meta" :style="{ color: muted }">
           {{ platformLabel }} · {{ tagsLine }}
         </text>
       </view>
-      <text
-        class="focus-unshelf"
-        :style="{ color: muted }"
-        @click.stop="onUnshelf(focusGame.id)"
-      >
-        取消展示
-      </text>
       <text
         class="focus-delete"
         :style="{ color: accent || '#e60012' }"
@@ -60,9 +62,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import CasePack from './CasePack.vue'
+import MarkIcon from './MarkIcon.vue'
 import { PLATFORM_LABELS } from '../services/catalog'
 import type { Game, Platform } from '../types/catalog'
-import { STATUS_COLORS, STATUS_LABELS } from '../types/catalog'
 
 const props = defineProps<{
   games: Game[]
@@ -77,7 +79,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [id: string]
   remove: [id: string]
-  unshelf: [id: string]
 }>()
 
 const focusIndex = ref(0)
@@ -132,19 +133,6 @@ const platformLabel = computed(() => {
   if (props.platform === 'switch') return 'Switch 卡带盒'
   if (props.platform === 'ps5') return 'PS5 光盘盒'
   return 'Steam 游戏盒'
-})
-
-const statusLabel = computed(() =>
-  focusGame.value ? STATUS_LABELS[focusGame.value.status] : '',
-)
-
-const badgeStyle = computed(() => {
-  if (!focusGame.value) return {}
-  const status = focusGame.value.status
-  return {
-    background: STATUS_COLORS[status],
-    color: status === 'shelved' ? '#ffffff' : '#1a1a1a',
-  }
 })
 
 const tagsLine = computed(() => {
@@ -263,11 +251,6 @@ function onRemove(id: string) {
   if (didSwipe.value) return
   emit('remove', id)
 }
-
-function onUnshelf(id: string) {
-  if (didSwipe.value) return
-  emit('unshelf', id)
-}
 </script>
 
 <style scoped>
@@ -339,8 +322,7 @@ function onUnshelf(id: string) {
   min-width: 0;
 }
 
-.focus-delete,
-.focus-unshelf {
+.focus-delete {
   flex-shrink: 0;
   font-size: 24rpx;
   font-weight: 700;
@@ -362,12 +344,7 @@ function onUnshelf(id: string) {
 }
 
 .status-badge {
-  flex-shrink: 0;
-  font-size: 22rpx;
-  font-weight: 700;
-  line-height: 1.4;
-  padding: 4rpx 14rpx;
-  border-radius: 999rpx;
+  display: none;
 }
 
 .focus-meta {

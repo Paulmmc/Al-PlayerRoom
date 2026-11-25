@@ -7,6 +7,12 @@
       }
     },
     {
+      "path": "pages/schedule/index",
+      "style": {
+        "navigationBarTitleText": "游玩排期"
+      }
+    },
+    {
       "path": "pages/search/index",
       "style": {
         "navigationBarTitleText": "搜索"
@@ -50,10 +56,10 @@
         "selectedIconPath": "static/tabbar/home-active.png"
       },
       {
-        "pagePath": "pages/search/index",
-        "text": "搜索",
-        "iconPath": "static/tabbar/search.png",
-        "selectedIconPath": "static/tabbar/search-active.png"
+        "pagePath": "pages/schedule/index",
+        "text": "排期",
+        "iconPath": "static/tabbar/schedule.png",
+        "selectedIconPath": "static/tabbar/schedule-active.png"
       },
       {
         "pagePath": "pages/player/profile",
