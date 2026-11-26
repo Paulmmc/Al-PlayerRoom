@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="page" :style="pageStyle">
     <view class="search-bar">
       <input
         class="input"
@@ -20,7 +20,7 @@
       >
         <text
           class="status-tab-text"
-          :style="{ color: statusFilter === 'all' ? '#1a1a1a' : '#8a93a8' }"
+          :style="{ color: statusFilter === 'all' ? theme.tabActiveText : theme.muted }"
         >
           全部
         </text>
@@ -35,7 +35,7 @@
       >
         <text
           class="status-tab-text"
-          :style="{ color: statusFilter === item ? (item === 'shelved' ? '#ffffff' : '#1a1a1a') : '#8a93a8' }"
+          :style="{ color: statusFilter === item ? (item === 'shelved' ? '#ffffff' : '#1a1a1a') : theme.muted }"
         >
           {{ statusLabels[item] }}
         </text>
@@ -67,6 +67,8 @@ import StoreGameCard from '../../components/StoreGameCard.vue'
 import { getGame, reloadFromStorage, removeGame, searchMyGames, setOnShelf } from '../../services/catalog'
 import type { Game, PlayStatus } from '../../types/catalog'
 import { PLAY_STATUSES, STATUS_COLORS, STATUS_LABELS } from '../../types/catalog'
+import { applyLibraryNav, libraryPlatform } from '../../services/library-theme'
+import { getStoreTheme } from '../../theme/store'
 
 const keyword = ref('')
 const statusFilter = ref<'all' | PlayStatus>('all')
@@ -75,6 +77,15 @@ const matchedCount = ref(0)
 const playStatuses = PLAY_STATUSES
 const statusLabels = STATUS_LABELS
 const statusColors = STATUS_COLORS
+const theme = computed(() => getStoreTheme(libraryPlatform.value))
+const pageStyle = computed(() => ({
+  background: theme.value.pageBg,
+  '--card': theme.value.cardBg,
+  '--text': theme.value.text,
+  '--muted': theme.value.muted,
+  '--accent': theme.value.accent,
+  '--track': theme.value.tabBg,
+}))
 
 const eshopOnly = computed(
   () => results.value.length > 0 && results.value.every((g) => g.platform === 'switch'),
@@ -107,6 +118,7 @@ watch(keyword, () => {
 })
 
 onShow(() => {
+  applyLibraryNav('搜索')
   refresh()
 })
 
@@ -147,7 +159,7 @@ function confirmRemove(id: string) {
 .page {
   min-height: 100vh;
   padding: 24rpx 28rpx 48rpx;
-  background: #0f1219;
+  background: transparent;
   box-sizing: border-box;
 }
 
@@ -165,34 +177,34 @@ function confirmRemove(id: string) {
   flex: 1;
   height: 56rpx;
   border-radius: 999rpx;
-  border: 2rpx solid #3a4258;
+  border: 2rpx solid var(--track);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .status-tab.on {
-  background: #8b9cff;
-  border-color: #8b9cff;
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .status-tab-text {
   font-size: 22rpx;
   font-weight: 700;
-  color: #f2f4f8;
+  color: var(--text);
 }
 
 .input {
   height: 80rpx;
   padding: 0 28rpx;
   border-radius: 16rpx;
-  background: #1a1f2e;
-  color: #f2f4f8;
+  background: var(--card);
+  color: var(--text);
   font-size: 28rpx;
 }
 
 .placeholder {
-  color: #6b7388;
+  color: var(--muted);
 }
 
 .list-eshop {
@@ -212,7 +224,7 @@ function confirmRemove(id: string) {
 }
 
 .empty-text {
-  color: #6b7388;
+  color: var(--muted);
   font-size: 28rpx;
 }
 </style>

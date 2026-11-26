@@ -1,14 +1,16 @@
 <template>
+  <view class="screen" :style="screenStyle">
+  <NavMenu title="游玩排期" current="schedule" />
   <view class="page" @click="heldId = ''">
     <text class="title">游玩排期</text>
     <SlidePick
       :options="filters"
       :value="filter"
-      track="#1c2230"
-      thumb="#8b9cff"
-      active="#1a1a1a"
-      muted="#8a93a8"
-      accent="#8b9cff"
+      :track="theme.tabBg"
+      :thumb="theme.tabActiveBg"
+      :active="theme.tabActiveText"
+      :muted="theme.muted"
+      :accent="theme.accent"
       @pick="filter = $event"
     />
 
@@ -18,11 +20,11 @@
         v-if="formMode === 'create'"
         :options="planModes"
         :value="planForm.mode"
-        track="#1c2230"
-        thumb="#8b9cff"
-        active="#1a1a1a"
-        muted="#8a93a8"
-        accent="#8b9cff"
+        :track="theme.tabBg"
+        :thumb="theme.tabActiveBg"
+        :active="theme.tabActiveText"
+        :muted="theme.muted"
+        :accent="theme.accent"
         @pick="planForm.setMode"
       />
       <scroll-view v-if="formMode === 'create'" class="game-scroll" scroll-x enable-flex>
@@ -75,7 +77,7 @@
         <text class="muted" @click="closeForm">取消</text>
         <text
           class="link"
-          :style="{ color: createBlocked ? '#8a93a8' : '#8b9cff' }"
+          :style="{ color: createBlocked ? theme.muted : theme.accent }"
           @click="submitForm"
         >{{ formMode === 'move' ? '保存改期' : '加入排期' }}</text>
       </view>
@@ -194,6 +196,7 @@
       <text>排一期</text>
     </view>
   </view>
+  </view>
 </template>
 
 <script setup lang="ts">
@@ -201,6 +204,7 @@ import { computed, nextTick, onUnmounted, ref } from 'vue'
 import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
 import { useLongPress } from '../../composables/useLongPress'
 import SlidePick from '../../components/SlidePick.vue'
+import NavMenu from '../../components/NavMenu.vue'
 import { planModes, usePlanRangeForm, isStoredGame } from '../../composables/usePlanRangeForm'
 import {
   listMyGames,
@@ -214,8 +218,21 @@ import {
 } from '../../services/catalog'
 import type { Game, PlayPlan } from '../../types/catalog'
 import { PLATFORM_LABELS } from '../../types/catalog'
+import { libraryPlatform } from '../../services/library-theme'
+import { getStoreTheme } from '../../theme/store'
 
 type Row = { game: Game; plan: PlayPlan }
+
+const theme = computed(() => getStoreTheme(libraryPlatform.value))
+const screenStyle = computed(() => ({
+  background: theme.value.pageBg,
+  '--page': theme.value.pageBg,
+  '--card': theme.value.cardBg,
+  '--text': theme.value.text,
+  '--muted': theme.value.muted,
+  '--accent': theme.value.accent,
+  '--on-accent': theme.value.tabActiveText,
+}))
 
 const labels = PLATFORM_LABELS
 const filters = [
@@ -459,9 +476,9 @@ onShow(refresh)
 .page {
   min-height: 100vh;
   padding: 24rpx 28rpx 180rpx;
-  background: #0f1219;
+  background: var(--page);
   box-sizing: border-box;
-  color: #e8edf5;
+  color: var(--text);
 }
 
 .title,
@@ -480,7 +497,7 @@ onShow(refresh)
 
 .form,
 .card {
-  background: #1a1f2e;
+  background: var(--card);
   border-radius: 16rpx;
   padding: 20rpx;
   margin-top: 20rpx;
@@ -548,7 +565,7 @@ onShow(refresh)
 .soft,
 .muted,
 .hint {
-  color: #8a93a8;
+  color: var(--muted);
   margin-top: 6rpx;
 }
 
@@ -559,7 +576,7 @@ onShow(refresh)
   margin-top: 12rpx;
   font-size: 24rpx;
   font-weight: 700;
-  color: #8b9cff;
+  color: var(--accent);
 }
 
 .danger {
@@ -592,7 +609,7 @@ onShow(refresh)
   top: 16rpx;
   bottom: -28rpx;
   width: 2rpx;
-  background: #8a93a8;
+  background: var(--muted);
   opacity: 0.45;
 }
 
@@ -603,7 +620,7 @@ onShow(refresh)
   width: 16rpx;
   height: 16rpx;
   border-radius: 999rpx;
-  background: #8b9cff;
+  background: var(--accent);
 }
 
 .day-copy {
@@ -615,7 +632,7 @@ onShow(refresh)
 .day-year {
   display: block;
   font-size: 22rpx;
-  color: #8a93a8;
+  color: var(--muted);
 }
 
 .day-cards {
@@ -624,26 +641,26 @@ onShow(refresh)
 }
 
 .link {
-  color: #8b9cff;
+  color: var(--accent);
   font-weight: 700;
 }
 
 .date {
   margin-top: 12rpx;
-  color: #e8edf5;
+  color: var(--text);
 }
 
 .fab {
   position: fixed;
   right: 36rpx;
-  bottom: calc(140rpx + env(safe-area-inset-bottom));
+  bottom: calc(32rpx + env(safe-area-inset-bottom));
   z-index: 20;
   min-width: 120rpx;
   height: 88rpx;
   padding: 0 28rpx;
   border-radius: 999rpx;
-  background: #8b9cff;
-  color: #1a1a1a;
+  background: var(--accent);
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;

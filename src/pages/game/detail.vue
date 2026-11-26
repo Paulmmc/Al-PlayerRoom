@@ -15,7 +15,7 @@
       <view class="hero-mask" :style="maskStyle" />
       <view class="hero-meta">
         <text class="badge" :style="{ background: theme.accent }">{{ platformText }}</text>
-        <text class="hero-title" :style="{ color: theme.id === 'switch' ? '#fff' : theme.text }">
+        <text class="hero-title" :style="{ color: game.platform === 'switch' ? '#fff' : '#f5f7fa' }">
           {{ game.title }}
         </text>
       </view>
@@ -241,14 +241,14 @@
 
     <button
       class="edit-btn"
-      :style="{ background: theme.accent, color: theme.id === 'steam' ? '#1b2838' : '#fff' }"
+      :style="{ background: theme.accent, color: theme.tabActiveText }"
       @click="goEdit"
     >
       编辑
     </button>
     <button class="delete-btn" @click="confirmDelete">从游戏库删除</button>
   </view>
-  <view v-else class="page empty" :style="{ background: '#0f1219' }">
+  <view v-else class="page empty" :style="{ background: theme.pageBg }">
     <text class="empty-text">游戏不存在</text>
   </view>
 </template>
@@ -272,6 +272,7 @@ import {
   updateJournalEntry,
 } from '../../services/catalog'
 import { getStoreTheme } from '../../theme/store'
+import { libraryPlatform, applyLibraryNav } from '../../services/library-theme'
 import SlidePick from '../../components/SlidePick.vue'
 import type { ChoiceOption } from '../../components/choice-menus'
 import type { Game, JournalEntry, PlayStatus } from '../../types/catalog'
@@ -305,9 +306,7 @@ const statusOptions = PLAY_STATUSES.map((item) => ({
 }))
 const segTrack = computed(() => theme.value.tabBg)
 
-const theme = computed(() =>
-  getStoreTheme(game.value?.platform ?? 'steam'),
-)
+const theme = computed(() => getStoreTheme(libraryPlatform.value))
 
 const platformText = computed(() =>
   game.value ? platformLabel(game.value.platform) : '',
@@ -316,13 +315,14 @@ const platformText = computed(() =>
 const cover = computed(() => (game.value ? gameCover(game.value) : ''))
 
 const maskStyle = computed(() => {
-  if (theme.value.id === 'switch') {
+  const platform = game.value?.platform
+  if (platform === 'switch') {
     return {
       background:
         'linear-gradient(transparent 30%, rgba(0,0,0,0.55) 100%)',
     }
   }
-  if (theme.value.id === 'ps5') {
+  if (platform === 'ps5') {
     return {
       background:
         'linear-gradient(90deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 70%)',
@@ -335,8 +335,8 @@ const maskStyle = computed(() => {
 })
 
 const tagStyle = computed(() => ({
-  color: theme.value.id === 'switch' ? theme.value.accent : theme.value.muted,
-  background: theme.value.id === 'switch' ? '#ffe8ea' : theme.value.pageBg,
+  color: libraryPlatform.value === 'switch' ? theme.value.accent : theme.value.muted,
+  background: libraryPlatform.value === 'switch' ? '#ffe8ea' : theme.value.pageBg,
 }))
 
 function todayText() {
@@ -503,12 +503,7 @@ function refresh() {
   game.value = getGame(gameId.value)
   note.value = game.value?.note ?? ''
   if (game.value) {
-    const t = getStoreTheme(game.value.platform)
-    uni.setNavigationBarTitle({ title: game.value.title })
-    uni.setNavigationBarColor({
-      frontColor: t.navText === 'white' ? '#ffffff' : '#000000',
-      backgroundColor: t.navBg,
-    })
+    applyLibraryNav(game.value.title)
   }
 }
 

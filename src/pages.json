@@ -3,13 +3,13 @@
     {
       "path": "pages/home/index",
       "style": {
-        "navigationBarTitleText": "游戏库"
+        "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/schedule/index",
       "style": {
-        "navigationBarTitleText": "游玩排期"
+        "navigationStyle": "custom"
       }
     },
     {
@@ -33,7 +33,7 @@
     {
       "path": "pages/player/profile",
       "style": {
-        "navigationBarTitleText": "我的"
+        "navigationStyle": "custom"
       }
     }
   ],
@@ -42,31 +42,5 @@
     "navigationBarTitleText": "PlayerRoom",
     "navigationBarBackgroundColor": "#0f1219",
     "backgroundColor": "#0f1219"
-  },
-  "tabBar": {
-    "color": "#6b7388",
-    "selectedColor": "#8b9cff",
-    "backgroundColor": "#151a26",
-    "borderStyle": "black",
-    "list": [
-      {
-        "pagePath": "pages/home/index",
-        "text": "游戏库",
-        "iconPath": "static/tabbar/home.png",
-        "selectedIconPath": "static/tabbar/home-active.png"
-      },
-      {
-        "pagePath": "pages/schedule/index",
-        "text": "排期",
-        "iconPath": "static/tabbar/schedule.png",
-        "selectedIconPath": "static/tabbar/schedule-active.png"
-      },
-      {
-        "pagePath": "pages/player/profile",
-        "text": "我的",
-        "iconPath": "static/tabbar/profile.png",
-        "selectedIconPath": "static/tabbar/profile-active.png"
-      }
-    ]
   }
 }

@@ -158,6 +158,7 @@ import {
   updateGame,
 } from '../../services/catalog'
 import { getStoreTheme } from '../../theme/store'
+import { libraryPlatform, applyLibraryNav } from '../../services/library-theme'
 import ChoiceMenu from '../../components/ChoiceMenu.vue'
 import { SHELF_MENU, STATUS_MENU } from '../../components/choice-menus'
 import type { Game, Platform, PlayStatus } from '../../types/catalog'
@@ -180,7 +181,7 @@ const coverImage = ref<string | undefined>()
 const tags = ref<string[]>([])
 const status = ref<PlayStatus>('backlog')
 const onShelf = ref(false)
-const theme = computed(() => getStoreTheme(platform.value))
+const theme = computed(() => getStoreTheme(libraryPlatform.value))
 const pageTheme = computed(() => ({
   background: theme.value.pageBg,
   color: theme.value.text,
@@ -229,7 +230,7 @@ onLoad((query) => {
     coverColor.value = '#2a3350'
     coverImage.value = undefined
     ready.value = true
-    uni.setNavigationBarTitle({ title: '添加游戏' })
+    applyLibraryNav('添加游戏')
     return
   }
 
@@ -250,7 +251,7 @@ onLoad((query) => {
   onShelf.value = game.onShelf
   note.value = game.note
   ready.value = true
-  uni.setNavigationBarTitle({ title: '编辑游戏' })
+  applyLibraryNav('编辑游戏')
 })
 
 function fileToDataUrl(path: string): Promise<string> {

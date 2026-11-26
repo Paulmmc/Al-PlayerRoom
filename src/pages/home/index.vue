@@ -1,4 +1,6 @@
 <template>
+  <view class="screen">
+  <NavMenu :title="theme.name" current="home" />
   <view class="page" :style="pageStyle">
     <view class="hero">
       <text class="hero-title" :style="{ color: theme.text }">{{ theme.name }}</text>
@@ -210,12 +212,14 @@
       <text class="fab-label">添加</text>
     </view>
   </view>
+  </view>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import PackShelf from '../../components/PackShelf.vue'
+import NavMenu from '../../components/NavMenu.vue'
 import MarkIcon from '../../components/MarkIcon.vue'
 import {
   gameCover,
@@ -229,6 +233,7 @@ import {
 } from '../../services/catalog'
 import { consumeHomeStatus } from '../../services/home-intent'
 import { getStoreTheme } from '../../theme/store'
+import { libraryPlatform } from '../../services/library-theme'
 import type { Game, Platform, PlayStatus } from '../../types/catalog'
 import { PLAY_STATUSES, STATUS_LABELS } from '../../types/catalog'
 
@@ -236,7 +241,7 @@ const platforms = PLATFORMS
 const labels = PLATFORM_LABELS
 const playStatuses = PLAY_STATUSES
 const statusLabels = STATUS_LABELS
-const platform = ref<Platform>('switch')
+const platform = libraryPlatform
 const statusFilter = ref<'all' | PlayStatus>('all')
 const shelfGames = ref<Game[]>(listShelfGames('switch'))
 const listedGames = ref<Game[]>([])
@@ -269,15 +274,6 @@ const pageStyle = computed(() => ({
 const fabTextColor = computed(() =>
   theme.value.id === 'steam' ? '#1b2838' : '#ffffff',
 )
-
-function applyNav() {
-  const t = theme.value
-  uni.setNavigationBarColor({
-    frontColor: t.navText === 'white' ? '#ffffff' : '#000000',
-    backgroundColor: t.navBg,
-  })
-  uni.setNavigationBarTitle({ title: t.name })
-}
 
 const listEmptyText = computed(() => {
   if (platformTotal.value === 0) return '该平台暂无游戏'
@@ -416,7 +412,6 @@ function refresh(animate = false) {
   if (animate) {
     listKey.value += 1
   }
-  applyNav()
 }
 
 function selectStatus(item: 'all' | PlayStatus) {
@@ -702,7 +697,7 @@ function goAdd() {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 32rpx 28rpx calc(260rpx + env(safe-area-inset-bottom));
+  padding: 32rpx 28rpx calc(180rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
@@ -1047,7 +1042,7 @@ function goAdd() {
 .fab {
   position: fixed;
   right: 36rpx;
-  bottom: calc(140rpx + env(safe-area-inset-bottom));
+  bottom: calc(32rpx + env(safe-area-inset-bottom));
   z-index: 20;
   min-width: 120rpx;
   height: 88rpx;
