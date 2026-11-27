@@ -31,6 +31,7 @@ export {
   explainPlanRange,
   newerPlanFirst,
   removePlayPlan,
+  restorePlayPlan,
   reschedulePlayPlan,
   togglePlayPlan,
 } from './plans'

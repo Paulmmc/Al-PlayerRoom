@@ -21,6 +21,7 @@ export function isStoredGame(result: unknown): result is Game {
 }
 
 export function usePlanRangeForm() {
+  let rangeInitialized = false
   const today = dateInputText(Date.now())
   const state = reactive({
     mode: 'day' as 'day' | 'range',
@@ -31,6 +32,7 @@ export function usePlanRangeForm() {
   })
 
   function reset(at = Date.now()) {
+    rangeInitialized = false
     const text = dateInputText(at)
     state.mode = 'day'
     state.dayText = text
@@ -40,6 +42,11 @@ export function usePlanRangeForm() {
   }
 
   function setMode(value: string) {
+    if (value === 'range' && !rangeInitialized) {
+      state.startText = state.dayText
+      state.endText = state.dayText
+      rangeInitialized = true
+    }
     if (value === 'day' || value === 'range') state.mode = value
   }
 
@@ -48,6 +55,9 @@ export function usePlanRangeForm() {
       if (!game) return { reason: '先选择一款游戏', total: null as number | null, added: null as number | null, skipped: null as number | null }
       if (!Number.isFinite(parseDateInput(state.dayText))) {
         return { reason: '请选择有效日期', total: null, added: null, skipped: null }
+      }
+      if (game.plans?.some((plan) => plan.at === parseDateInput(state.dayText))) {
+        return { reason: '这一天已经排过这款', total: null, added: null, skipped: null }
       }
       return { reason: '', total: null, added: null, skipped: null }
     }
@@ -60,7 +70,7 @@ export function usePlanRangeForm() {
     if (explained.status === 'too-long') return { reason: '一次最多安排366天', total: null, added: null, skipped: null }
     if (!game) return { reason: '先选择一款游戏', total: explained.total, added: null, skipped: null }
     if (explained.status !== 'ready') return { reason: '没有这款游戏', total: null, added: null, skipped: null }
-    return { reason: '', total: explained.total, added: explained.added, skipped: explained.skipped }
+    return { reason: explained.added === 0 ? '这些日期都已安排过这款' : '', total: explained.total, added: explained.added, skipped: explained.skipped }
   }
 
   function save(game: PlanGame | undefined): { close: boolean; toast: string } {

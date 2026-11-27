@@ -1,7 +1,7 @@
 <template>
   <view class="screen" :style="screenStyle">
   <NavMenu :title="player?.name || '我的'" current="profile" />
-  <view v-if="player" class="page">
+  <view v-if="player" class="page" :class="motionClass">
     <view class="header">
       <view class="avatar" :style="{ backgroundColor: theme.accent }">
         <text class="avatar-text">{{ player.initial }}</text>
@@ -23,7 +23,7 @@
       </view>
     </view>
   </view>
-  <view v-else class="page empty">
+  <view v-else class="page empty" :class="motionClass">
     <text class="empty-text">玩家不存在</text>
   </view>
   </view>
@@ -46,7 +46,10 @@ import MarkIcon from '../../components/MarkIcon.vue'
 import NavMenu from '../../components/NavMenu.vue'
 import { libraryPlatform } from '../../services/library-theme'
 import { getStoreTheme } from '../../theme/store'
+import { useRootPageMotion } from '../../composables/useRootPageMotion'
+import { goRootPage } from '../../services/root-transition'
 
+const { motionClass } = useRootPageMotion()
 const player = ref<Player | undefined>()
 const theme = computed(() => getStoreTheme(libraryPlatform.value))
 const screenStyle = computed(() => ({
@@ -91,7 +94,7 @@ onShow(() => {
 
 function openStatus(status: PlayStatus) {
   requestHomeStatus(status)
-  uni.reLaunch({ url: '/pages/home/index' })
+  goRootPage('profile', 'home', '/pages/home/index')
 }
 </script>
 

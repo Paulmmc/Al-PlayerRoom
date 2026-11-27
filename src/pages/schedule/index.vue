@@ -1,554 +1,510 @@
 <template>
   <view class="screen" :style="screenStyle">
-  <NavMenu title="游玩排期" current="schedule" />
-  <view class="page" @click="heldId = ''">
-    <text class="title">游玩排期</text>
-    <SlidePick
-      :options="filters"
-      :value="filter"
-      :track="theme.tabBg"
-      :thumb="theme.tabActiveBg"
-      :active="theme.tabActiveText"
-      :muted="theme.muted"
-      :accent="theme.accent"
-      @pick="filter = $event"
-    />
-
-    <view v-if="formMode" id="plan-form" class="form" @click.stop>
-      <text class="form-title">{{ formMode === 'move' ? '改期' : '安排游玩' }}</text>
-      <SlidePick
-        v-if="formMode === 'create'"
-        :options="planModes"
-        :value="planForm.mode"
-        :track="theme.tabBg"
-        :thumb="theme.tabActiveBg"
-        :active="theme.tabActiveText"
-        :muted="theme.muted"
-        :accent="theme.accent"
-        @pick="planForm.setMode"
-      />
-      <scroll-view v-if="formMode === 'create'" class="game-scroll" scroll-x enable-flex>
-        <view
-          v-for="item in library"
-          :key="item.id"
-          class="game-pick"
-          :class="{ on: item.id === pickedId }"
-          @click="pickedId = item.id"
-        >
-          <image v-if="item.coverImage" class="game-cover" :src="item.coverImage" mode="aspectFill" />
-          <view v-else class="game-cover" :style="{ background: item.coverColor }" />
-          <text class="game-name">{{ item.title }}</text>
-          <text class="game-platform">{{ labels[item.platform] }}</text>
+    <NavMenu title="游玩排期" current="schedule" />
+    <view class="page" :class="motionClass">
+      <view class="controls">
+        <SlidePick :options="views" :value="view" v-bind="pickColors" @pick="switchView" />
+        <view class="date-nav">
+          <template v-if="view === 'week'">
+            <button class="arrow" aria-label="上一周" @click="shiftWeek(-7)">‹</button>
+            <picker mode="date" :value="dateInputText(selectedDay)" @change="selectDate($event.detail.value)"><view class="month">{{ monthLabel }}</view></picker>
+            <button class="arrow" aria-label="下一周" @click="shiftWeek(7)">›</button>
+          </template>
+          <picker v-else class="jump" mode="date" :value="dateInputText(today)" @change="jumpDate($event.detail.value)"><view>▦ 跳到日期</view></picker>
+          <button class="today" @click="goToday">今天</button>
+        </view>
+        <view v-if="view === 'week'" class="week">
+          <view v-for="day in weekDays" :key="day" class="week-day" :class="{ selected: day === selectedDay }" @click="selectDay(day)">
+            <text class="weekday">{{ weekdays[(new Date(day).getDay() + 6) % 7] }}</text>
+            <text class="day-number" :class="{ 'is-today': day === today }">{{ new Date(day).getDate() }}</text>
+            <text class="day-count">{{ counts.get(day) || '—' }}</text>
+          </view>
+        </view>
+        <SlidePick :options="filters" :value="filter" v-bind="pickColors" @pick="setFilter" />
+      </view>
+      <scroll-view class="list" scroll-y :scroll-top="scrollTop" :scroll-into-view="scrollTarget" @scroll="onScroll">
+        <view class="list-content">
+          <view v-for="day in visibleDays" :id="dayId(day)" :key="day" class="day-group">
+            <view class="section-heading"><text>{{ dayLabel(day) }}</text><text class="muted">{{ rowsOn(day).length }}款游戏</text></view>
+            <view v-for="row in rowsOn(day)" :key="row.game.id + row.plan.id" class="card" @longpress="more(row)">
+              <image v-if="row.game.coverImage" class="cover" :src="row.game.coverImage" mode="aspectFill" @click="openGame(row)" />
+              <view v-else class="cover" :style="{ background: row.game.coverColor }" @click="openGame(row)" />
+              <view class="card-copy">
+                <text class="card-title" @click="openGame(row)">{{ row.game.title }}</text>
+                <text class="muted">{{ PLATFORM_LABELS[row.game.platform] }}</text>
+                <text v-if="day < today && !row.plan.played" class="muted">还没玩</text>
+                <view class="actions">
+                  <button class="play" @click.stop="toggle(row)">{{ row.plan.played ? '撤销已游玩' : '玩过了' }}</button>
+                  <button class="more" aria-label="更多排期操作" @click.stop="more(row)">···</button>
+                </view>
+              </view>
+            </view>
+          </view>
+          <view v-if="view === 'week' && !rowsOn(selectedDay).length" class="empty">
+            <text>{{ weekEmpty }}</text>
+            <button v-if="!counts.get(selectedDay)" class="link" @click="openCreate">安排游玩</button>
+          </view>
+          <template v-if="view === 'all'">
+            <text v-if="!upcoming.length" class="empty">{{ emptyUpcoming }}</text>
+            <button v-if="upcoming.length > futureLimit" class="load" @click="futureLimit += 14">加载更多</button>
+            <view id="future-end" />
+            <button v-if="past.length" id="history-heading" class="history" @click="historyOpen = !historyOpen">之前的安排 {{ pastCount }} {{ historyOpen ? '⌃' : '⌄' }}</button>
+            <template v-if="historyOpen">
+              <view v-for="day in past.slice(0, pastLimit)" :id="dayId(day)" :key="day" class="day-group">
+                <view class="section-heading"><text>{{ dayLabel(day) }}</text><text class="muted">{{ rowsOn(day).length }}款游戏</text></view>
+                <view v-for="row in rowsOn(day)" :key="row.game.id + row.plan.id" class="card" @longpress="more(row)">
+                  <image v-if="row.game.coverImage" class="cover" :src="row.game.coverImage" mode="aspectFill" @click="openGame(row)" />
+                  <view v-else class="cover" :style="{ background: row.game.coverColor }" @click="openGame(row)" />
+                  <view class="card-copy">
+                    <text class="card-title" @click="openGame(row)">{{ row.game.title }}</text>
+                    <text class="muted">{{ PLATFORM_LABELS[row.game.platform] }}</text>
+                    <text v-if="!row.plan.played" class="muted">还没玩</text>
+                    <view class="actions"><button class="play" @click.stop="toggle(row)">{{ row.plan.played ? '撤销已游玩' : '玩过了' }}</button><button class="more" aria-label="更多排期操作" @click.stop="more(row)">···</button></view>
+                  </view>
+                </view>
+              </view>
+              <button v-if="past.length > pastLimit" class="load" @click="pastLimit += 14">加载更多历史安排</button>
+              <view id="history-end" />
+            </template>
+          </template>
+          <button v-if="view === 'week' && pastOpenCount" class="history" @click="showPastOpen">过去未玩的安排 {{ pastOpenCount }}　›</button>
         </view>
       </scroll-view>
-      <view v-else class="locked-game">
-        <text class="locked-name">{{ movingGame?.title }}</text>
-        <text v-if="movingGame" class="game-platform">{{ labels[movingGame.platform] }}</text>
-      </view>
-      <text v-if="formMode === 'create' && !library.length" class="hint">
-        先往游戏库添加一款游戏
-      </text>
-      <text
-        v-if="formMode === 'create' && !library.length"
-        class="link"
-        @click="goAdd"
-      >
-        去添加
-      </text>
-      <template v-if="formMode === 'move' || planForm.mode === 'day'">
-        <picker mode="date" :value="formMode === 'move' ? planDate : planForm.dayText" @change="onDate">
-          <view class="date">{{ formMode === 'move' ? planDate : planForm.dayText }}</view>
-        </picker>
-      </template>
-      <template v-else>
-        <text class="hint">开始日期</text>
-        <picker mode="date" :value="planForm.startText" @change="onStart">
-          <view class="date">{{ planForm.startText }}</view>
-        </picker>
-        <text class="hint">结束日期</text>
-        <picker mode="date" :value="planForm.endText" @change="onEnd">
-          <view class="date">{{ planForm.endText }}</view>
-        </picker>
-        <text v-if="formView.total != null" class="hint">共 {{ formView.total }} 天</text>
-        <text v-if="formView.added != null" class="hint">新增 {{ formView.added }} 天，跳过 {{ formView.skipped }} 天</text>
-      </template>
-      <text v-if="formMode === 'create' && formView.reason" class="hint">{{ formView.reason }}</text>
-      <view class="form-actions">
-        <text class="muted" @click="closeForm">取消</text>
-        <text
-          class="link"
-          :style="{ color: createBlocked ? theme.muted : theme.accent }"
-          @click="submitForm"
-        >{{ formMode === 'move' ? '保存改期' : '加入排期' }}</text>
-      </view>
     </view>
-
-    <text v-if="!allRows.length" class="hint">还没有排期</text>
-    <text v-else-if="filter === 'open' && !upcoming.length && !past.length" class="hint">没有未游玩的排期</text>
-    <text v-else-if="filter === 'played' && !upcoming.length && !past.length" class="hint">没有已游玩的排期</text>
-
-    <view v-if="showTodayEmpty" class="hint">今天还没有安排</view>
-
-    <view v-for="(day, index) in upcoming" :key="day" class="day-row">
-      <view class="day-side">
-        <view class="rail">
-          <view v-if="index < upcoming.length - 1" class="rail-line" />
-          <view class="rail-dot" />
-        </view>
-        <view class="day-copy">
-          <text v-if="dayMark(day)" class="day-flag">{{ dayMark(day) }}</text>
-          <text class="day-label">{{ monthDay(day) }}</text>
-          <text v-if="showYear(day)" class="day-year">{{ yearOf(day) }}</text>
-        </view>
-      </view>
-      <view class="day-cards">
-        <view
-          v-for="row in rowsOn(day)"
-          :key="row.plan.id"
-          class="card"
-          @click="openGame(row)"
-          @touchstart.stop="holdStart(row.plan.id, $event)"
-          @touchmove.stop="holdMove"
-          @touchend="holdEnd"
-          @touchcancel="holdLeave"
-          @mousedown.stop="holdStart(row.plan.id, $event)"
-          @mousemove="holdMove"
-          @mouseup="holdEnd"
-          @mouseleave="holdLeave"
-        >
-          <image v-if="row.game.coverImage" class="cover" :src="row.game.coverImage" mode="aspectFill" />
-          <view v-else class="cover" :style="{ background: row.game.coverColor }" />
-          <view class="card-copy">
-            <text class="card-title">{{ row.game.title }}</text>
-            <text class="card-platform">{{ labels[row.game.platform] }}</text>
-            <text v-if="day < today && !row.plan.played" class="soft">还没玩</text>
-            <view class="card-actions" @click.stop>
-              <text @click="toggle(row)">{{ row.plan.played ? '已游玩' : '玩过了' }}</text>
-              <text @click="openMove(row)">改期</text>
-              <text v-if="day < today && !row.plan.played" @click="moveToday(row)">移到今天</text>
-            </view>
-            <view v-if="heldId === row.plan.id" class="card-actions" @click.stop>
-              <text class="danger" @click="remove(row)">删除</text>
-            </view>
-          </view>
-        </view>
-      </view>
-    </view>
-
-    <text v-if="past.length" class="section">之前的安排</text>
-    <view v-for="(day, index) in past" :key="'p' + day" class="day-row">
-      <view class="day-side">
-        <view class="rail">
-          <view v-if="index < past.length - 1" class="rail-line" />
-          <view class="rail-dot" />
-        </view>
-        <view class="day-copy">
-          <text class="day-label">{{ monthDay(day) }}</text>
-          <text v-if="showYear(day)" class="day-year">{{ yearOf(day) }}</text>
-        </view>
-      </view>
-      <view class="day-cards">
-        <view
-          v-for="row in rowsOn(day)"
-          :key="row.plan.id"
-          class="card"
-          @click="openGame(row)"
-          @touchstart.stop="holdStart(row.plan.id, $event)"
-          @touchmove.stop="holdMove"
-          @touchend="holdEnd"
-          @touchcancel="holdLeave"
-          @mousedown.stop="holdStart(row.plan.id, $event)"
-          @mousemove="holdMove"
-          @mouseup="holdEnd"
-          @mouseleave="holdLeave"
-        >
-          <image v-if="row.game.coverImage" class="cover" :src="row.game.coverImage" mode="aspectFill" />
-          <view v-else class="cover" :style="{ background: row.game.coverColor }" />
-          <view class="card-copy">
-            <text class="card-title">{{ row.game.title }}</text>
-            <text class="card-platform">{{ labels[row.game.platform] }}</text>
-            <text v-if="!row.plan.played" class="soft">还没玩</text>
-            <view class="card-actions" @click.stop>
-              <text @click="toggle(row)">{{ row.plan.played ? '已游玩' : '玩过了' }}</text>
-              <text @click="openMove(row)">改期</text>
-              <text v-if="!row.plan.played" @click="moveToday(row)">移到今天</text>
-            </view>
-            <view v-if="heldId === row.plan.id" class="card-actions" @click.stop>
-              <text class="danger" @click="remove(row)">删除</text>
-            </view>
-          </view>
-        </view>
-      </view>
-    </view>
-
-    <view
-      class="fab"
-      :class="{ pressed: fabPressed }"
-      @click.stop="openCreate"
-      @touchstart="fabPressed = true"
-      @touchend="fabPressed = false"
-      @touchcancel="fabPressed = false"
-      @mousedown="fabPressed = true"
-      @mouseup="fabPressed = false"
-      @mouseleave="fabPressed = false"
-    >
-      <text class="fab-plus">+</text>
-      <text>排一期</text>
-    </view>
-  </view>
+    <button class="fab" @click="openCreate">＋ 排一期</button>
+    <view v-if="deleted" class="undo"><text>已删除</text><button @click="undoDelete">撤销</button></view>
+    <PlanSheet v-if="sheet" :initial-date="sheet.at" :game-id="sheet.gameId" :moving-plan="sheet.plan" @close="sheet = null" @saved="saved" />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref } from 'vue'
-import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
-import { useLongPress } from '../../composables/useLongPress'
-import SlidePick from '../../components/SlidePick.vue'
-import NavMenu from '../../components/NavMenu.vue'
-import { planModes, usePlanRangeForm, isStoredGame } from '../../composables/usePlanRangeForm'
-import {
-  listMyGames,
-  localMidnight,
-  newerPlanFirst,
-  parseDateInput,
-  reloadFromStorage,
-  reschedulePlayPlan,
-  togglePlayPlan,
-  removePlayPlan,
-} from '../../services/catalog'
-import type { Game, PlayPlan } from '../../types/catalog'
-import { PLATFORM_LABELS } from '../../types/catalog'
-import { libraryPlatform } from '../../services/library-theme'
-import { getStoreTheme } from '../../theme/store'
-
-type Row = { game: Game; plan: PlayPlan }
-
-const theme = computed(() => getStoreTheme(libraryPlatform.value))
-const screenStyle = computed(() => ({
-  background: theme.value.pageBg,
-  '--page': theme.value.pageBg,
-  '--card': theme.value.cardBg,
-  '--text': theme.value.text,
-  '--muted': theme.value.muted,
-  '--accent': theme.value.accent,
-  '--on-accent': theme.value.tabActiveText,
-}))
-
-const labels = PLATFORM_LABELS
-const filters = [
-  { value: 'all', label: '全部' },
-  { value: 'open', label: '未游玩' },
-  { value: 'played', label: '已游玩' },
-]
-const filter = ref('all')
-const library = ref<Game[]>([])
-const today = ref(localMidnight())
-const formMode = ref<'create' | 'move' | ''>('')
-const pickedId = ref('')
-const movingId = ref('')
-const movingGameId = ref('')
-const planDate = ref(dateText(Date.now()))
-const heldId = ref('')
-const planHold = useLongPress()
-const fabPressed = ref(false)
-const presetGameId = ref('')
-const planForm = usePlanRangeForm()
-const pickedGame = computed(() => library.value.find((game) => game.id === pickedId.value))
-const formView = computed(() => planForm.describe(pickedGame.value))
-const createBlocked = computed(() => formMode.value === 'create' && !!formView.value.reason)
-
-const movingGame = computed(() => library.value.find((game) => game.id === movingGameId.value))
-
+import { computed, nextTick, onUnmounted, ref } from 'vue';
+import { onBackPress, onHide, onLoad, onShow } from '@dcloudio/uni-app';
+import NavMenu from '../../components/NavMenu.vue';
+import SlidePick from '../../components/SlidePick.vue';
+import PlanSheet from '../../components/PlanSheet.vue';
+import { isStoredGame } from '../../composables/usePlanRangeForm';
+import { useRootPageMotion } from '../../composables/useRootPageMotion';
+import { dateInputText, listMyGames, localMidnight, newerPlanFirst, parseDateInput, reloadFromStorage, removePlayPlan, reschedulePlayPlan, restorePlayPlan, togglePlayPlan } from '../../services/catalog';
+import { libraryPlatform } from '../../services/library-theme';
+import { getStoreTheme } from '../../theme/store';
+import { PLATFORM_LABELS } from '../../types/catalog';
+import type { Game, PlayPlan } from '../../types/catalog';
+type Row = {
+  game: Game;
+  plan: PlayPlan;
+};
+type View = 'week' | 'all';
+const { motionClass } = useRootPageMotion();
+const theme = computed(() => getStoreTheme(libraryPlatform.value));
+const screenStyle = computed(() => ({ background: theme.value.pageBg, '--page': theme.value.pageBg, '--card': theme.value.cardBg, '--text': theme.value.text, '--muted': theme.value.muted, '--accent': theme.value.accent, '--on-accent': theme.value.tabActiveText, '--track': theme.value.tabBg }));
+const pickColors = computed(() => ({ track: theme.value.tabBg, thumb: theme.value.tabActiveBg, active: theme.value.tabActiveText, muted: theme.value.muted, accent: theme.value.accent }));
+const views = [{ value: 'week', label: '按周' }, { value: 'all', label: '全部' }];
+const filters = [{ value: 'all', label: '全部' }, { value: 'open', label: '未游玩' }, { value: 'played', label: '已游玩' }];
+const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+const view = ref<View>('week');
+const filter = ref('all');
+const today = ref(localMidnight());
+const selectedDay = ref(today.value);
+const library = ref<Game[]>([]);
+const futureLimit = ref(14);
+const pastLimit = ref(14);
+const historyOpen = ref(false);
+const scrollTop = ref(0);
+const scrollTarget = ref('');
+const positions: Record<View, number> = { week: 0, all: 0 };
+const sheet = ref<{
+  at: number;
+  gameId?: string;
+  plan?: PlayPlan;
+} | null>(null);
+const deleted = ref<{
+  gameId: string;
+  plan: PlayPlan;
+} | null>(null);
+let undoTimer: ReturnType<typeof setTimeout> | undefined;
+let hidden = false;
+let detailDay: number | null = null;
+const allRows = computed<Row[]>(() => library.value.flatMap((game) => (game.plans ?? []).map((plan) => ({ game, plan }))));
+const counts = computed(() => {
+  const map = new Map<number, number>();
+  for (const row of allRows.value)
+    map.set(row.plan.at, (map.get(row.plan.at) ?? 0) + 1);
+  return map;
+});
 const grouped = computed(() => {
-  const now = today.value
-  const byDay = new Map<number, Row[]>()
-  for (const game of library.value) {
-    for (const plan of game.plans ?? []) {
-      if (filter.value === 'open' && plan.played) continue
-      if (filter.value === 'played' && !plan.played) continue
-      const day = localMidnight(plan.at)
-      const list = byDay.get(day) ?? []
-      list.push({ game, plan })
-      byDay.set(day, list)
-    }
+  const map = new Map<number, Row[]>();
+  for (const row of allRows.value) {
+    if (filter.value === 'open' && row.plan.played)
+      continue;
+    if (filter.value === 'played' && !row.plan.played)
+      continue;
+    const list = map.get(row.plan.at) ?? [];
+    list.push(row);
+    map.set(row.plan.at, list);
   }
-  for (const list of byDay.values()) {
-    list.sort((a, b) => newerPlanFirst(a.plan.id, b.plan.id))
-  }
-  const days = [...byDay.keys()]
-  return {
-    byDay,
-    upcoming: days.filter((day) => day >= now).sort((a, b) => a - b),
-    past: days.filter((day) => day < now).sort((a, b) => b - a),
-    any: days.length > 0,
-  }
-})
-
-const upcoming = computed(() => grouped.value.upcoming)
-const past = computed(() => grouped.value.past)
-const allRows = computed(() => {
-  const rows: Row[] = []
-  for (const game of library.value) rows.push(...(game.plans ?? []).map((plan) => ({ game, plan })))
-  return rows
-})
-const showTodayEmpty = computed(
-  () => allRows.value.length > 0 && filter.value === 'all' && !grouped.value.byDay.has(today.value) && upcoming.value.length > 0,
-)
-
-function rowsOn(day: number) {
-  return grouped.value.byDay.get(day) ?? []
+  for (const list of map.values())
+    list.sort((a, b) => newerPlanFirst(a.plan.id, b.plan.id));
+  return map;
+});
+const upcoming = computed(() => [...grouped.value.keys()].filter((day) => day >= today.value).sort((a, b) => a - b));
+const past = computed(() => [...grouped.value.keys()].filter((day) => day < today.value).sort((a, b) => b - a));
+const visibleDays = computed(() => view.value === 'week' ? [selectedDay.value] : upcoming.value.slice(0, futureLimit.value));
+const pastCount = computed(() => past.value.reduce((count, day) => count + rowsOn(day).length, 0));
+const pastOpenCount = computed(() => allRows.value.filter((row) => row.plan.at < today.value && !row.plan.played).length);
+const weekDays = computed(() => {
+  const date = new Date(selectedDay.value);
+  date.setDate(date.getDate() - (date.getDay() + 6) % 7);
+  return Array.from({ length: 7 }, (_, index) => shiftDay(date.getTime(), index));
+});
+const monthLabel = computed(() => `${new Date(selectedDay.value).getFullYear()}年${new Date(selectedDay.value).getMonth() + 1}月`);
+const weekEmpty = computed(() => counts.value.get(selectedDay.value) ? `这一天没有${filter.value === 'played' ? '已游玩' : '未游玩'}的安排` : '这一天还没有安排');
+const emptyUpcoming = computed(() => filter.value === 'all' ? '今天和未来还没有安排' : `今天和未来没有${filter.value === 'played' ? '已游玩' : '未游玩'}的安排`);
+function shiftDay(at: number, offset: number) {
+  const date = new Date(at);
+  date.setDate(date.getDate() + offset);
+  return date.getTime();
 }
-
-function monthDay(day: number) {
-  const date = new Date(day)
-  return `${date.getMonth() + 1}/${date.getDate()}`
+function rowsOn(day: number) { return grouped.value.get(day) ?? []; }
+function dayId(day: number) { return `day-${day}`; }
+function dayLabel(day: number) {
+  const date = new Date(day);
+  const year = date.getFullYear() !== new Date(today.value).getFullYear() ? `${date.getFullYear()}年` : '';
+  const prefix = day === today.value ? '今天 · ' : day === shiftDay(today.value, 1) ? '明天 · ' : '';
+  return `${prefix}${year}${date.getMonth() + 1}月${date.getDate()}日${prefix ? '' : ' 周' + weekdays[(date.getDay() + 6) % 7]}`;
 }
-
-function yearOf(day: number) {
-  return String(new Date(day).getFullYear())
-}
-
-function showYear(day: number) {
-  return new Date(day).getFullYear() !== new Date(today.value).getFullYear()
-}
-
-function dayMark(day: number) {
-  const tomorrow = new Date(today.value)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  if (day === today.value) return '今天'
-  if (day === localMidnight(tomorrow)) return '明天'
-  return ''
-}
-
-function dateText(at: number) {
-  const date = new Date(at)
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${date.getFullYear()}-${month}-${day}`
-}
-
 function refresh() {
-  today.value = localMidnight()
-  reloadFromStorage()
-  library.value = listMyGames()
+  const now = localMidnight();
+  if (selectedDay.value === today.value)
+    selectedDay.value = now;
+  today.value = now;
+  reloadFromStorage();
+  library.value = listMyGames();
 }
-
-async function revealForm() {
-  await nextTick()
-  uni.pageScrollTo({ selector: '#plan-form', duration: 200 })
+function onScroll(event: {
+  detail: {
+    scrollTop: number;
+  };
+}) { positions[view.value] = event.detail.scrollTop; }
+async function setScroll(top: number) {
+  scrollTarget.value = '';
+  scrollTop.value = positions[view.value];
+  await nextTick();
+  scrollTop.value = top;
 }
-
+async function scrollTo(id: string) {
+  scrollTarget.value = '';
+  await nextTick();
+  scrollTarget.value = id;
+}
+async function switchView(value: string) {
+  if (value !== 'week' && value !== 'all')
+    return;
+  if (value === view.value)
+    return;
+  view.value = value;
+  await nextTick();
+  setScroll(positions[value]);
+}
+function selectDay(day: number) { selectedDay.value = day; setScroll(0); }
+function selectDate(text: string) {
+  const at = parseDateInput(text);
+  if (Number.isFinite(at))
+    selectDay(at);
+}
+function shiftWeek(offset: number) { selectDay(shiftDay(selectedDay.value, offset)); }
+function setFilter(value: string) {
+  filter.value = value;
+  futureLimit.value = 14;
+  pastLimit.value = 14;
+  setScroll(0);
+}
+async function jumpDate(text: string) {
+  const at = parseDateInput(text);
+  if (!Number.isFinite(at))
+    return;
+  const isPast = at < today.value;
+  if (isPast)
+    historyOpen.value = true;
+  const days = isPast ? [...past.value].reverse() : upcoming.value;
+  const target = days.find((day) => day >= at);
+  if (!grouped.value.has(at))
+    uni.showToast({ title: '这一天没有符合筛选的安排', icon: 'none' });
+  if (target != null) {
+    if (isPast)
+      pastLimit.value = Math.max(pastLimit.value, past.value.indexOf(target) + 1);
+    else
+      futureLimit.value = Math.max(futureLimit.value, upcoming.value.indexOf(target) + 1);
+    await scrollTo(dayId(target));
+  }
+  else {
+    if (isPast)
+      pastLimit.value = past.value.length;
+    else
+      futureLimit.value = upcoming.value.length;
+    await scrollTo(isPast ? 'history-end' : 'future-end');
+  }
+}
+function goToday() {
+  refresh();
+  if (view.value === 'week')
+    selectDay(today.value);
+  else
+    jumpDate(dateInputText(today.value));
+}
+async function showPastOpen() {
+  filter.value = 'open';
+  view.value = 'all';
+  historyOpen.value = true;
+  await scrollTo('history-heading');
+}
 function openCreate() {
-  refresh()
-  heldId.value = ''
-  formMode.value = 'create'
-  pickedId.value = presetGameId.value || library.value[0]?.id || ''
-  planForm.reset(today.value)
-  revealForm()
+  refresh();
+  sheet.value = { at: view.value === 'week' ? selectedDay.value : today.value };
 }
-
-function openMove(row: Row) {
-  formMode.value = 'move'
-  movingId.value = row.plan.id
-  movingGameId.value = row.game.id
-  planDate.value = dateText(row.plan.at)
-  revealForm()
+function saved(message: string) {
+  const creating = !sheet.value?.plan;
+  sheet.value = null;
+  refresh();
+  uni.showToast({ title: creating && filter.value === 'played' ? '已加入排期，切换到全部或未游玩查看' : message, icon: 'none' });
 }
-
-function closeForm() {
-  formMode.value = ''
-}
-
-function onDate(event: { detail: { value: string } }) {
-  const value = event.detail.value
-  if (formMode.value === 'move') planDate.value = value
-  else planForm.dayText = value
-}
-
-function onStart(event: { detail: { value: string } }) {
-  planForm.startText = event.detail.value
-}
-
-function onEnd(event: { detail: { value: string } }) {
-  planForm.endText = event.detail.value
-}
-
-function submitForm() {
-  if (formMode.value === 'create') {
-    const outcome = planForm.save(pickedGame.value)
-    if (outcome.toast) uni.showToast({ title: outcome.toast, icon: 'none' })
-    if (!outcome.close) return
-    closeForm()
-    refresh()
-    return
-  }
-  const at = parseDateInput(planDate.value)
-  if (!Number.isFinite(at)) {
-    uni.showToast({ title: '请选择有效日期', icon: 'none' })
-    return
-  }
-  const result = reschedulePlayPlan(movingGameId.value, movingId.value, at)
-  if (!isStoredGame(result)) {
-    if (result === 'duplicate') uni.showToast({ title: '这一天已经排过这款', icon: 'none' })
-    else if (result === 'invalid') uni.showToast({ title: '请选择有效日期', icon: 'none' })
-    else if (result === 'failed') uni.showToast({ title: '保存失败', icon: 'none' })
-    else uni.showToast({ title: '没有这款游戏', icon: 'none' })
-    return
-  }
-  closeForm()
-  refresh()
-}
-
-function toggle(row: Row) {
-  const result = togglePlayPlan(row.game.id, row.plan.id)
-  if (!isStoredGame(result)) {
-    uni.showToast({ title: result === 'failed' ? '保存失败' : '没有这款游戏', icon: 'none' })
-    return
-  }
-  refresh()
-}
-
-function moveToday(row: Row) {
-  const result = reschedulePlayPlan(row.game.id, row.plan.id, today.value)
-  if (!isStoredGame(result)) {
-    if (result === 'duplicate') uni.showToast({ title: '这一天已经排过这款', icon: 'none' })
-    else if (result === 'invalid') uni.showToast({ title: '请选择有效日期', icon: 'none' })
-    else uni.showToast({ title: result === 'failed' ? '保存失败' : '没有这款游戏', icon: 'none' })
-    return
-  }
-  refresh()
-}
-
-function remove(row: Row) {
-  removePlayPlan(row.game.id, row.plan.id)
-  heldId.value = ''
-  refresh()
-}
-
 function openGame(row: Row) {
-  if (planHold.takeSuppressedClick()) return
-  if (heldId.value) {
-    heldId.value = ''
-    return
+  detailDay = row.plan.at;
+  uni.navigateTo({ url: `/pages/game/detail?id=${row.game.id}` });
+}
+function toggle(row: Row) {
+  const result = togglePlayPlan(row.game.id, row.plan.id);
+  if (!isStoredGame(result)) {
+    uni.showToast({ title: '保存失败', icon: 'none' });
+    return;
   }
-  uni.navigateTo({ url: `/pages/game/detail?id=${row.game.id}` })
+  refresh();
 }
-
-function goAdd() {
-  uni.navigateTo({ url: '/pages/game/edit?mode=create' })
+function more(row: Row) {
+  const canMoveToday = row.plan.at < today.value && !row.plan.played;
+  const actions = canMoveToday ? ['改期', '移到今天', '删除'] : ['改期', '删除'];
+  uni.showActionSheet({ itemList: actions, success: ({ tapIndex }) => {
+      const action = actions[tapIndex];
+      if (action === '改期')
+        sheet.value = { at: row.plan.at, gameId: row.game.id, plan: { ...row.plan } };
+      if (action === '移到今天') {
+        const result = reschedulePlayPlan(row.game.id, row.plan.id, today.value);
+        if (!isStoredGame(result))
+          uni.showToast({ title: result === 'duplicate' ? '这一天已经排过这款' : '保存失败', icon: 'none' });
+        refresh();
+      }
+      if (action === '删除')
+        remove(row);
+    } });
 }
-
-function holdStart(id: string, event: TouchEvent | MouseEvent) {
-  planHold.start(event, () => {
-    heldId.value = id
-  })
+function clearUndo() {
+  if (undoTimer)
+    clearTimeout(undoTimer);
+  undoTimer = undefined;
+  deleted.value = null;
 }
-
-function holdMove(event: TouchEvent | MouseEvent) {
-  planHold.move(event)
+function remove(row: Row) {
+  if (!removePlayPlan(row.game.id, row.plan.id)) {
+    uni.showToast({ title: '删除失败', icon: 'none' });
+    return;
+  }
+  clearUndo();
+  deleted.value = { gameId: row.game.id, plan: { ...row.plan } };
+  undoTimer = setTimeout(clearUndo, 5000);
+  refresh();
 }
-
-function holdEnd() {
-  planHold.end()
+function undoDelete() {
+  if (!deleted.value)
+    return;
+  reloadFromStorage();
+  const result = restorePlayPlan(deleted.value.gameId, deleted.value.plan);
+  if (isStoredGame(result)) {
+    clearUndo();
+    refresh();
+    return;
+  }
+  uni.showToast({ title: result === 'duplicate' ? '这一天已有安排，无法撤销' : result === 'failed' ? '保存失败' : '游戏已不存在，无法撤销', icon: 'none' });
 }
-
-function holdLeave() {
-  holdEnd()
-}
-
-function clearHold() {
-  planHold.reset()
-  heldId.value = ''
-}
-
-onHide(clearHold)
-onUnmounted(clearHold)
-
 onLoad((query) => {
-  presetGameId.value = String(query?.gameId ?? '')
-  if (presetGameId.value) openCreate()
-})
-
-onShow(refresh)
+  refresh();
+  if (query?.gameId)
+    sheet.value = { at: today.value, gameId: String(query.gameId) };
+});
+onShow(async () => {
+  refresh();
+  if (hidden) {
+    hidden = false;
+    await nextTick();
+    if (view.value === 'all' && detailDay != null && !grouped.value.has(detailDay)) {
+      await jumpDate(dateInputText(detailDay));
+    }
+    else {
+      await setScroll(positions[view.value]);
+    }
+    detailDay = null;
+  }
+});
+onHide(() => { hidden = true; sheet.value = null; clearUndo(); });
+onBackPress(() => { if (!sheet.value)
+  return false; sheet.value = null; return true; });
+onUnmounted(clearUndo);
 </script>
 
 <style scoped>
+.screen {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+  overflow: hidden;
+}
+
 .page {
-  min-height: 100vh;
-  padding: 24rpx 28rpx 180rpx;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--page);
-  box-sizing: border-box;
+}
+
+.controls {
+  padding: 24rpx 28rpx 12rpx;
+}
+
+button {
+  margin: 0;
+  padding: 12rpx 20rpx;
+  background: transparent;
+  color: var(--accent);
+  line-height: 1.5;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+}
+
+button::after {
+  border: none;
+}
+
+.date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  padding: 24rpx 0;
+}
+
+.month {
+  font-size: 30rpx;
+  font-weight: 700;
   color: var(--text);
 }
 
-.title,
-.form-title,
-.section {
-  display: block;
-  font-size: 36rpx;
-  font-weight: 700;
-  margin-bottom: 20rpx;
+.arrow {
+  font-size: 44rpx;
+  color: var(--text);
+  padding: 0 12rpx;
 }
 
-.section {
-  margin-top: 28rpx;
+.today {
+  border: 1px solid var(--accent);
+  padding: 6rpx 20rpx;
+}
+
+.jump {
+  flex: 1;
   font-size: 28rpx;
-}
-
-.form,
-.card {
+  color: var(--muted);
+  padding: 10rpx 18rpx;
   background: var(--card);
-  border-radius: 16rpx;
-  padding: 20rpx;
-  margin-top: 20rpx;
+  border-radius: 14rpx;
 }
 
-.game-scroll {
-  white-space: nowrap;
-  margin-bottom: 16rpx;
+.week {
+  display: flex;
+  gap: 6rpx;
+  margin-bottom: 26rpx;
 }
 
-.game-pick {
-  display: inline-flex;
+.week-day {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
-  width: 120rpx;
-  margin-right: 16rpx;
-  opacity: 0.55;
-}
-
-.game-pick.on {
-  opacity: 1;
-}
-
-.game-cover,
-.cover {
-  width: 120rpx;
-  height: 160rpx;
-  border-radius: 8rpx;
-  background: #111;
-}
-
-.cover {
-  width: 96rpx;
-  height: 128rpx;
-  flex-shrink: 0;
-}
-
-.game-name,
-.card-title,
-.card-platform,
-.soft,
-.hint,
-.date,
-.muted,
-.link {
-  display: block;
+  align-items: center;
+  gap: 10rpx;
+  padding: 12rpx 0;
+  border-radius: 20rpx;
   font-size: 24rpx;
+}
+
+.weekday, .day-count {
+  color: var(--muted);
+  font-size: 22rpx;
+}
+
+.day-number {
+  font-weight: 700;
+  font-size: 30rpx;
+}
+
+.is-today {
+  text-decoration: underline;
+  text-underline-offset: 5rpx;
+}
+
+.week-day.selected {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.selected .weekday, .selected .day-count {
+  color: var(--on-accent);
+}
+
+.list {
+  flex: 1;
+  height: 0;
+  min-height: 0;
+}
+
+.list-content {
+  padding: 0 28rpx calc(180rpx + env(safe-area-inset-bottom));
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  padding: 24rpx 0 16rpx;
+}
+
+.muted {
+  display: block;
+  color: var(--muted);
+  font-size: 24rpx;
+  font-weight: 400;
+  margin-top: 6rpx;
 }
 
 .card {
   display: flex;
-  gap: 16rpx;
+  align-items: center;
+  gap: 18rpx;
+  padding: 18rpx;
+  margin-bottom: 14rpx;
+  background: var(--card);
+  border-radius: 22rpx;
+}
+
+.cover {
+  width: 100rpx;
+  height: 124rpx;
+  flex-shrink: 0;
+  border-radius: 12rpx;
 }
 
 .card-copy {
@@ -557,141 +513,103 @@ onShow(refresh)
 }
 
 .card-title {
-  font-size: 28rpx;
-  font-weight: 700;
-}
-
-.card-platform,
-.soft,
-.muted,
-.hint {
-  color: var(--muted);
-  margin-top: 6rpx;
-}
-
-.card-actions,
-.form-actions {
-  display: flex;
-  gap: 20rpx;
-  margin-top: 12rpx;
-  font-size: 24rpx;
-  font-weight: 700;
-  color: var(--accent);
-}
-
-.danger {
-  color: #e60012;
-}
-
-.day-row {
-  display: flex;
-  margin-top: 20rpx;
-}
-
-.day-side {
-  width: 144rpx;
-  flex-shrink: 0;
-  position: relative;
-  display: flex;
-}
-
-.rail {
-  position: absolute;
-  top: 8rpx;
-  bottom: 0;
-  right: 28rpx;
-  width: 16rpx;
-}
-
-.rail-line {
-  position: absolute;
-  left: 7rpx;
-  top: 16rpx;
-  bottom: -28rpx;
-  width: 2rpx;
-  background: var(--muted);
-  opacity: 0.45;
-}
-
-.rail-dot {
-  position: absolute;
-  left: 0;
-  top: 8rpx;
-  width: 16rpx;
-  height: 16rpx;
-  border-radius: 999rpx;
-  background: var(--accent);
-}
-
-.day-copy {
-  padding-right: 36rpx;
-}
-
-.day-flag,
-.day-label,
-.day-year {
   display: block;
-  font-size: 22rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 10rpx;
+}
+
+.play {
+  border: 1px solid var(--accent);
+  padding: 4rpx 16rpx;
+  font-size: 24rpx;
+}
+
+.more {
+  font-size: 30rpx;
+  padding: 0 12rpx;
+  color: var(--text);
+}
+
+.empty {
+  display: block;
+  text-align: center;
+  padding: 48rpx 12rpx;
+  font-size: 26rpx;
   color: var(--muted);
 }
 
-.day-cards {
-  flex: 1;
-  min-width: 0;
+.history {
+  width: 100%;
+  text-align: left;
+  background: var(--card);
+  color: var(--text);
+  margin: 24rpx 0;
+  padding: 22rpx;
+}
+
+.load {
+  width: 100%;
+  color: var(--muted);
+  padding: 24rpx;
 }
 
 .link {
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.date {
-  margin-top: 12rpx;
-  color: var(--text);
+  margin-top: 20rpx;
 }
 
 .fab {
   position: fixed;
-  right: 36rpx;
-  bottom: calc(32rpx + env(safe-area-inset-bottom));
   z-index: 20;
-  min-width: 120rpx;
-  height: 88rpx;
-  padding: 0 28rpx;
+  right: 28rpx;
+  bottom: calc(28rpx + env(safe-area-inset-bottom));
   border-radius: 999rpx;
+  padding: 20rpx 28rpx;
   background: var(--accent);
   color: var(--on-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6rpx;
-  font-size: 26rpx;
   font-weight: 700;
-  box-shadow: 0 12rpx 28rpx rgba(0, 0, 0, 0.28);
+  box-shadow: 0 12rpx 28rpx rgba(0,0,0,.28);
   animation: fabPulse 2.4s ease-in-out infinite;
-  transition: transform 0.15s ease;
 }
 
-.fab.pressed {
-  transform: scale(0.92);
+.fab:active {
+  transform: scale(.92);
   animation: none;
 }
 
-.fab-plus {
-  font-size: 40rpx;
-  font-weight: 700;
-  line-height: 1;
+.undo {
+  position: fixed;
+  z-index: 100;
+  bottom: calc(132rpx + env(safe-area-inset-bottom));
+  left: 28rpx;
+  right: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 24rpx;
+  background: var(--card);
+  color: var(--text);
+  border-radius: 20rpx;
+  box-shadow: 0 8rpx 28rpx rgba(0,0,0,.2);
+  font-size: 26rpx;
 }
 
 @keyframes fabPulse {
-  0%,
-  100% {
-    box-shadow: 0 12rpx 28rpx rgba(0, 0, 0, 0.28);
+  0%,100% {
     transform: scale(1);
   }
+
   50% {
-    box-shadow: 0 16rpx 36rpx rgba(0, 0, 0, 0.36);
     transform: scale(1.03);
   }
+
 }
 </style>

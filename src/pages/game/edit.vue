@@ -445,7 +445,7 @@ function save() {
 }
 
 .catalog-item.on .catalog-cover {
-  border-color: #7c5cff;
+  border-color: var(--accent);
 }
 
 .catalog-cover {

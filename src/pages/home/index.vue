@@ -1,7 +1,7 @@
 <template>
   <view class="screen">
   <NavMenu :title="theme.name" current="home" />
-  <view class="page" :style="pageStyle">
+  <view class="page" :class="motionClass" :style="pageStyle">
     <view class="hero">
       <text class="hero-title" :style="{ color: theme.text }">{{ theme.name }}</text>
       <text class="hero-sub" :style="{ color: theme.muted }">{{ theme.tagline }}</text>
@@ -233,10 +233,12 @@ import {
 } from '../../services/catalog'
 import { consumeHomeStatus } from '../../services/home-intent'
 import { getStoreTheme } from '../../theme/store'
-import { libraryPlatform } from '../../services/library-theme'
+import { libraryPlatform, setLibraryPlatform } from '../../services/library-theme'
+import { useRootPageMotion } from '../../composables/useRootPageMotion'
 import type { Game, Platform, PlayStatus } from '../../types/catalog'
 import { PLAY_STATUSES, STATUS_LABELS } from '../../types/catalog'
 
+const { motionClass } = useRootPageMotion()
 const platforms = PLATFORMS
 const labels = PLATFORM_LABELS
 const playStatuses = PLAY_STATUSES
@@ -422,7 +424,7 @@ function selectStatus(item: 'all' | PlayStatus) {
 
 function selectPlatform(item: Platform) {
   if (platform.value === item) return
-  platform.value = item
+  setLibraryPlatform(item)
   refresh(true)
 }
 
@@ -431,7 +433,7 @@ onShow(() => {
   if (intent) {
     statusFilter.value = intent
     const order: Platform[] = ['switch', 'ps5', 'steam']
-    platform.value = order.find((item) => listMyGamesFiltered(item, intent).length > 0) ?? 'switch'
+    setLibraryPlatform(order.find((item) => listMyGamesFiltered(item, intent).length > 0) ?? 'switch')
   }
   refresh(true)
 })

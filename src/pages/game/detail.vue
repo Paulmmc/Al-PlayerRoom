@@ -57,57 +57,6 @@
         />
       </view>
       <text class="plan-entry" :style="{ color: theme.accent }" @click="openPlan">安排游玩</text>
-      <view v-if="planOpen" id="plan-form" class="journal-form" :style="{ background: theme.cardBg }">
-        <SlidePick
-          :options="planModes"
-          :value="planForm.mode"
-          :track="segTrack"
-          :thumb="theme.tabActiveBg"
-          :active="theme.tabActiveText"
-          :muted="theme.muted"
-          :accent="theme.accent"
-          @pick="planForm.setMode"
-        />
-        <scroll-view class="plan-scroll" scroll-x enable-flex>
-          <view
-            v-for="item in library"
-            :key="item.id"
-            class="plan-game"
-            :class="{ on: item.id === planGameId }"
-            @click="planGameId = item.id"
-          >
-            <image v-if="item.coverImage" class="plan-cover" :src="item.coverImage" mode="aspectFill" />
-            <text class="plan-name" :style="{ color: theme.text }">{{ item.title }}</text>
-            <text class="plan-platform" :style="{ color: theme.muted }">{{ platformLabels[item.platform] }}</text>
-          </view>
-        </scroll-view>
-        <template v-if="planForm.mode === 'day'">
-          <picker mode="date" :value="planForm.dayText" @change="onPlanDate">
-            <view class="journal-date" :style="{ color: theme.text }">{{ planForm.dayText }}</view>
-          </picker>
-        </template>
-        <template v-else>
-          <text class="plan-platform" :style="{ color: theme.muted }">开始日期</text>
-          <picker mode="date" :value="planForm.startText" @change="onPlanStart">
-            <view class="journal-date" :style="{ color: theme.text }">{{ planForm.startText }}</view>
-          </picker>
-          <text class="plan-platform" :style="{ color: theme.muted }">结束日期</text>
-          <picker mode="date" :value="planForm.endText" @change="onPlanEnd">
-            <view class="journal-date" :style="{ color: theme.text }">{{ planForm.endText }}</view>
-          </picker>
-          <text v-if="planView.total != null" class="plan-platform" :style="{ color: theme.muted }">共 {{ planView.total }} 天</text>
-          <text v-if="planView.added != null" class="plan-platform" :style="{ color: theme.muted }">新增 {{ planView.added }} 天，跳过 {{ planView.skipped }} 天</text>
-        </template>
-        <text v-if="planView.reason" class="plan-platform" :style="{ color: theme.muted }">{{ planView.reason }}</text>
-        <view class="journal-actions">
-          <text class="journal-cancel" :style="{ color: theme.muted }" @click="planOpen = false">取消</text>
-          <text
-            class="journal-save"
-            :style="{ color: planView.reason ? theme.muted : theme.accent }"
-            @click="savePlan"
-          >加入排期</text>
-        </view>
-      </view>
       <view class="note-box">
         <input
           class="note-input"
@@ -251,18 +200,18 @@
   <view v-else class="page empty" :style="{ background: theme.pageBg }">
     <text class="empty-text">游戏不存在</text>
   </view>
+  <PlanSheet v-if="planOpen" :initial-date="Date.now()" :game-id="gameId" @close="planOpen = false" @saved="planSaved" />
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { computed, ref } from 'vue'
+import { onBackPress, onHide, onLoad, onShow } from '@dcloudio/uni-app'
 import { useLongPress } from '../../composables/useLongPress'
-import { planModes, usePlanRangeForm } from '../../composables/usePlanRangeForm'
+import PlanSheet from '../../components/PlanSheet.vue'
 import {
   addJournalEntry,
   gameCover,
   getGame,
-  listMyGames,
   platformLabel,
   reloadFromStorage,
   removeGame,
@@ -276,19 +225,13 @@ import { libraryPlatform, applyLibraryNav } from '../../services/library-theme'
 import SlidePick from '../../components/SlidePick.vue'
 import type { ChoiceOption } from '../../components/choice-menus'
 import type { Game, JournalEntry, PlayStatus } from '../../types/catalog'
-import { PLAY_STATUSES, PLATFORM_LABELS, STATUS_LABELS } from '../../types/catalog'
+import { PLAY_STATUSES, STATUS_LABELS } from '../../types/catalog'
 
 const gameId = ref('')
 const game = ref<Game | undefined>()
 const note = ref('')
 const journalOpen = ref(false)
 const planOpen = ref(false)
-const planGameId = ref('')
-const planForm = usePlanRangeForm()
-const library = ref<Game[]>([])
-const planGame = computed(() => library.value.find((item) => item.id === planGameId.value))
-const planView = computed(() => planForm.describe(planGame.value))
-const platformLabels = PLATFORM_LABELS
 const heldJournalId = ref('')
 const journalHold = useLongPress()
 const editingJournalId = ref('')
@@ -527,37 +470,21 @@ function setStatus(next: string) {
 }
 
 function openPlan() {
-  reloadFromStorage()
-  library.value = listMyGames()
-  planGameId.value = game.value?.id ?? ''
-  planForm.reset(Date.now())
   planOpen.value = true
-  revealPlanForm()
 }
 
-async function revealPlanForm() {
-  await nextTick()
-  uni.pageScrollTo({ selector: '#plan-form', duration: 200 })
-}
-
-function onPlanDate(event: { detail: { value: string } }) {
-  planForm.dayText = event.detail.value
-}
-
-function onPlanStart(event: { detail: { value: string } }) {
-  planForm.startText = event.detail.value
-}
-
-function onPlanEnd(event: { detail: { value: string } }) {
-  planForm.endText = event.detail.value
-}
-
-function savePlan() {
-  const outcome = planForm.save(planGame.value)
-  if (outcome.toast) uni.showToast({ title: outcome.toast, icon: 'none' })
-  if (!outcome.close) return
+function planSaved(message: string) {
   planOpen.value = false
+  refresh()
+  uni.showToast({ title: message, icon: 'none' })
 }
+
+onHide(() => { planOpen.value = false })
+onBackPress(() => {
+  if (!planOpen.value) return false
+  planOpen.value = false
+  return true
+})
 
 function setShelf(next: string) {
   if (!game.value) return
@@ -749,34 +676,15 @@ function confirmDelete() {
   font-weight: 700;
 }
 
-.plan-scroll {
-  white-space: nowrap;
-  margin-bottom: 12rpx;
-}
 
-.plan-game {
-  display: inline-flex;
-  width: 140rpx;
-  margin-right: 12rpx;
-  opacity: 0.5;
-}
 
-.plan-game.on {
-  opacity: 1;
-}
 
-.plan-cover {
-  width: 140rpx;
-  height: 80rpx;
-  border-radius: 8rpx;
-}
 
-.plan-name {
-  font-size: 22rpx;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+
+
+
+
+
 
 .note-box {
   margin-top: 20rpx;

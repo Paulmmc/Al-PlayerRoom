@@ -117,3 +117,13 @@ export function removePlayPlan(gameId: string, planId: string): boolean {
     plans.filter((plan) => plan.id !== planId),
   ) !== 'failed'
 }
+
+export function restorePlayPlan(gameId: string, plan: PlayPlan): Game | 'duplicate' | 'invalid' | 'failed' | undefined {
+  const index = locateGame(gameId)
+  if (index < 0) return undefined
+  const day = planDay(plan.at)
+  if (day == null || !plan.id) return 'invalid'
+  const plans = planList(getGames()[index])
+  if (plans.some((item) => item.at === day || item.id === plan.id)) return 'duplicate'
+  return writePlans(index, [...plans, { ...plan, at: day }])
+}
